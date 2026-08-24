@@ -5,13 +5,24 @@ import type {
   Verdict,
 } from "./scan-types";
 
-export const RISK_ENGINE_VERSION = "0.1" as const;
+export const RISK_ENGINE_VERSION = "0.2" as const;
 
 interface RiskResult {
   verdict: Verdict;
   summary: string;
   rules: FiredRule[];
 }
+
+const CONTRACT_REQUIRED_EVIDENCE = [
+  "EVIDENCE_CONTRACT_VERIFICATION",
+  "EVIDENCE_CONTRACT_CREATION",
+  "EVIDENCE_RECENT_ACTIVITY",
+];
+
+const WALLET_REQUIRED_EVIDENCE = [
+  "EVIDENCE_RECENT_ACTIVITY",
+  "EVIDENCE_ACTIVE_APPROVALS",
+];
 
 export function evaluateRisk(
   targetType: TargetType,
@@ -20,7 +31,6 @@ export function evaluateRisk(
   const rules: FiredRule[] = [];
   const dangerous = evidence.filter((item) => item.status === "danger");
   const warnings = evidence.filter((item) => item.status === "warning");
-  const unavailable = evidence.filter((item) => item.status === "unavailable");
 
   if (dangerous.length > 0) {
     rules.push({
@@ -54,37 +64,46 @@ export function evaluateRisk(
     };
   }
 
-  const deepEvidenceAvailable = evidence.some((item) =>
-    [
-      "EVIDENCE_CONTRACT_VERIFICATION",
-      "EVIDENCE_ACTIVE_APPROVALS",
-      "EVIDENCE_RECENT_ACTIVITY",
-    ].includes(item.id) && item.status !== "unavailable",
-  );
+  const requiredEvidence =
+    targetType === "contract"
+      ? CONTRACT_REQUIRED_EVIDENCE
+      : WALLET_REQUIRED_EVIDENCE;
+  const missingRequiredEvidence = requiredEvidence.filter((id) => {
+    const item = evidence.find((candidate) => candidate.id === id);
+    return !item || item.status === "unavailable";
+  });
 
-  if (!deepEvidenceAvailable) {
+  if (missingRequiredEvidence.length > 0) {
     rules.push({
-      id: "RULE_BASELINE_ONLY",
+      id: "RULE_REQUIRED_EVIDENCE_MISSING",
       effect: "insufficient-data",
       explanation:
-        "The baseline RPC scan completed, but indexed history and exposure checks were not available.",
-      evidenceIds: unavailable.map((item) => item.id),
+        "One or more evidence categories required for a low-observed-risk conclusion were unavailable.",
+      evidenceIds: missingRequiredEvidence,
     });
 
     return {
       verdict: "INSUFFICIENT DATA",
       summary:
         targetType === "contract"
-          ? "Shield classified the contract and captured live chain evidence, but deeper metadata is required for a risk conclusion."
-          : "Shield classified the wallet and captured live chain evidence, but balance and transaction count alone cannot establish trust.",
+          ? "Shield captured live chain evidence, but source, deployment-provenance, or recent-activity evidence is missing. The scan cannot support a low-risk conclusion."
+          : "Shield captured live chain evidence, but recent activity or approval exposure is missing. The scan cannot establish trust.",
       rules,
     };
   }
 
+  rules.push({
+    id: "RULE_NO_ADVERSE_SIGNALS",
+    effect: "low-observed-risk",
+    explanation:
+      "The required checks completed and did not produce a warning or danger signal.",
+    evidenceIds: requiredEvidence,
+  });
+
   return {
     verdict: "LOW OBSERVED RISK",
     summary:
-      "No serious signal was found by the checks that completed. This is not a guarantee of safety.",
+      "No serious signal was found by the required checks. This is limited to observed evidence and is not a guarantee of safety.",
     rules,
   };
 }

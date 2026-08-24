@@ -8,6 +8,7 @@ function item(
 ): EvidenceItem {
   return {
     id,
+    category: "identity",
     label: id,
     status,
     claim: "Test claim",
@@ -48,11 +49,22 @@ describe("deterministic risk engine", () => {
     expect(result.verdict).toBe("HIGH OBSERVED RISK");
   });
 
-  it("allows low observed risk only when a deep check completed", () => {
+  it("allows low observed risk only when all required contract checks completed", () => {
     const result = evaluateRisk("contract", [
       item("EVIDENCE_CONTRACT_VERIFICATION", "pass"),
-      item("EVIDENCE_RECENT_ACTIVITY", "pass"),
+      item("EVIDENCE_CONTRACT_CREATION", "info"),
+      item("EVIDENCE_RECENT_ACTIVITY", "info"),
     ]);
     expect(result.verdict).toBe("LOW OBSERVED RISK");
+    expect(result.rules[0]?.id).toBe("RULE_NO_ADVERSE_SIGNALS");
+  });
+
+  it("keeps a contract inconclusive when creation evidence is missing", () => {
+    const result = evaluateRisk("contract", [
+      item("EVIDENCE_CONTRACT_VERIFICATION", "pass"),
+      item("EVIDENCE_CONTRACT_CREATION", "unavailable"),
+      item("EVIDENCE_RECENT_ACTIVITY", "info"),
+    ]);
+    expect(result.verdict).toBe("INSUFFICIENT DATA");
   });
 });

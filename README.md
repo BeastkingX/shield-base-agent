@@ -100,9 +100,36 @@ Type this command and press Enter:
 Copy-Item .env.example .env.local
 ```
 
-What this does: it copies the example settings into a private local settings file. The initial version already contains Base’s public development RPC, so you do not need to add a key yet.
+What this does: it copies the example settings into a private local settings file. Base’s public development RPC works without an account.
 
-Never put a wallet private key or recovery phrase in `.env.local`.
+A complete Phase 2.3 scan uses two free, server-only explorer keys because the providers have different Base coverage.
+
+### Add Etherscan for verified source metadata
+
+1. Open https://etherscan.io/register and create or sign in to an Etherscan account.
+2. Open https://etherscan.io/myapikey and create an API key.
+3. Open `.env.local` in VS Code.
+4. Put the key after `ETHERSCAN_API_KEY=` with no quotation marks.
+
+Etherscan's source and ABI endpoints remain free on Base. Its general Base API data, including creation and normal transaction history, currently requires a paid Etherscan plan; Shield therefore does not rely on it for those checks.
+
+### Add Blockscout for creation and activity
+
+1. Open https://dev.blockscout.com/ and create or sign in to a Blockscout developer account.
+2. Create a free PRO API key. The free tier does not require a credit card.
+3. Put the key after `BLOCKSCOUT_API_KEY=` with no quotation marks.
+4. Save `.env.local` and restart `npm.cmd run dev` if Shield was already running.
+
+Your private file should contain both values:
+
+```text
+ETHERSCAN_API_KEY=your_private_etherscan_key_here
+BLOCKSCOUT_API_KEY=your_private_blockscout_key_here
+```
+
+Shield sends Base chain ID `8453` to both universal APIs. It prefers Blockscout for creation and transaction history, can fall back to Etherscan when that key's plan supports Base, and records the provider used on each evidence item. For recent activity, Shield first uses Blockscout's Etherscan-compatible `account.txlist` route and automatically retries the same evidence through Blockscout's modern Base REST address-transactions route if the compatibility route fails. Missing or failed checks remain explicitly unavailable; Shield never pretends they passed.
+
+Never put a wallet private key or recovery phrase in `.env.local`. Never commit `.env.local`, paste its contents into chat, or use a `NEXT_PUBLIC_` name for either API key.
 
 If you use Command Prompt instead of PowerShell, use this command:
 
@@ -178,18 +205,25 @@ npm.cmd run dev
 
 # Current features
 
-The baseline scanner currently provides:
+Shield Phase 2.3 currently provides:
 
-- Base mainnet RPC health check
+- Base mainnet RPC health and block-reference checks
 - EVM address validation
 - Wallet-versus-contract classification using `eth_getCode`
 - Native ETH balance and transaction-count reads
 - Standard EIP-1967 proxy implementation-slot check for contracts
-- Versioned deterministic verdict logic
-- Evidence IDs, raw values, source methods, block numbers, and limitations
-- Explicit unavailable states for checks that have not run
+- Verified source metadata from Etherscan V2
+- Free Base creation and activity evidence from Blockscout's keyed PRO API
+- Redundant Blockscout activity retrieval through compatibility and modern REST routes
+- Exact-match official provenance for documented Base/OP Stack protocol predeploys such as WETH9
+- Provider fallback for ordinary contract creator, creation transaction, block, timestamp, and age evidence
+- The ten most recent indexed normal transactions with basic direction and failure summaries
+- Versioned deterministic verdict logic with required evidence gates
+- Evidence categories, structured facts, source methods, block numbers, and limitations
+- Evidence filters plus copy and JSON receipt download controls
+- Explicit unavailable states for missing keys, provider failures, and checks that have not run
 
-Explorer metadata, active approval discovery, AI evidence summaries, and community reports are later milestones. The interface does not fabricate those results.
+Active approval discovery, internal-call history, token-transfer history, transaction simulation, AI evidence summaries, and community reports are later milestones. The interface does not fabricate those results.
 
 # Environment variables
 
@@ -198,11 +232,24 @@ The `.env.local` file contains private settings used by the backend. Do not uplo
 ```text
 BASE_RPC_URL=https://mainnet.base.org
 ETHERSCAN_API_KEY=
+BLOCKSCOUT_API_KEY=
 AI_API_KEY=
 AI_MODEL=
 ```
 
-The empty settings will be configured in later milestones. Never place a wallet private key or recovery phrase in this project.
+`ETHERSCAN_API_KEY` supplies verified-source metadata. `BLOCKSCOUT_API_KEY` supplies free Base contract-creation and normal-transaction history. The AI settings remain unused because model output is not allowed to control evidence or verdicts. Never place a wallet private key or recovery phrase in this project.
+
+## Add the private keys to Vercel
+
+After adding the keys locally, configure them separately for the public deployment:
+
+1. Open the Shield project in the Vercel dashboard.
+2. Choose **Settings → Environment Variables**.
+3. Add `ETHERSCAN_API_KEY` and paste the private Etherscan value.
+4. Add `BLOCKSCOUT_API_KEY` and paste the private Blockscout value.
+5. Select the Production environment for both, save them, and redeploy the latest deployment.
+
+Do not add `.env.local` to GitHub. Vercel reads its own encrypted environment variables at runtime.
 
 # Architecture
 

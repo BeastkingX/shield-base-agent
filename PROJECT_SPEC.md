@@ -38,7 +38,7 @@ A user pastes a Base address. Shield will:
 - Bytecode existence and size
 - Contract verification status when the explorer API is configured
 - Proxy indicators, including standard EIP-1967 storage slots
-- Contract creation information when the explorer API is configured
+- Contract deployment provenance: indexed creation for ordinary contracts or exact-match official protocol-predeploy evidence
 - Recent activity when the explorer API is configured
 
 ## 4. Verdict language
@@ -76,6 +76,7 @@ Each finding contains:
 ```json
 {
   "id": "EVIDENCE_CODE_PRESENT",
+  "category": "identity",
   "label": "Contract bytecode detected",
   "status": "pass | warning | danger | info | unavailable",
   "claim": "This address contained deployed bytecode at the scanned block.",
@@ -84,6 +85,7 @@ Each finding contains:
   "blockNumber": 12345678,
   "observedAt": "ISO-8601 timestamp",
   "rawValue": "0x...",
+  "facts": { "Classification": "Smart contract" },
   "explorerUrl": "https://basescan.org/address/0x...",
   "limitations": []
 }
@@ -127,7 +129,7 @@ This milestone requires persistent storage and anti-spam controls. It will not b
 - **On-chain reads:** viem
 - **Primary chain:** Base mainnet, chain ID 8453
 - **Core source:** Base JSON-RPC
-- **Indexed metadata:** Etherscan V2 API for Base when configured
+- **Indexed metadata:** Etherscan V2 for verified source plus Blockscout PRO for free Base creation/activity, with compatibility-to-REST route redundancy and deterministic provider fallback
 - **AI explanation:** provider added behind a server-only adapter; no API keys in browser code
 - **Database for community reports:** Supabase/PostgreSQL in milestone two
 - **Deployment:** Vercel
@@ -172,18 +174,23 @@ We will not attack competing entries or make exclusivity claims that cannot be p
 
 ### Milestone 2 — Deeper evidence
 
-- Explorer API integration
-- Contract verification and creation metadata
-- Approval exposure checks
-- AI evidence summarizer with citation enforcement
+- [x] Server-only Etherscan V2 source integration for Base
+- [x] Server-only Blockscout PRO creation/activity integration with provider fallback
+- [x] Redundant Blockscout activity retrieval through compatibility and modern REST routes
+- [x] Contract verification plus ordinary-creation or official-predeploy provenance
+- [x] Recent normal-transaction evidence
+- [x] Explicit missing-key, API-failure, malformed-response, and empty-history states
+- [ ] Approval exposure checks
+- [ ] AI evidence summarizer with citation enforcement
 
 ### Milestone 3 — Product experience
 
-- Polished scan workflow
-- Evidence timeline and expandable raw facts
-- Responsive blue/white interface
-- Shareable receipt URL or export
-- Clear loading, error, and unavailable states
+- [x] Polished scan workflow
+- [x] Evidence categories, filters, and expandable structured facts
+- [x] Responsive blue/white interface
+- [x] Copy and downloadable JSON receipt controls
+- [x] Clear loading, error, and unavailable states
+- [ ] Persisted shareable receipt URLs
 
 ### Milestone 4 — Community and submission
 

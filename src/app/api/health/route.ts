@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { baseClient } from "@/lib/base-client";
+import { isBlockscoutConfigured } from "@/lib/blockscout-client";
+import { isExplorerConfigured } from "@/lib/etherscan-client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,19 @@ export async function GET() {
       chainId,
       blockNumber: blockNumber.toString(),
       latencyMs: Date.now() - startedAt,
+      services: {
+        baseRpc: "available",
+        sourceMetadata: isExplorerConfigured() ? "configured" : "not-configured",
+        indexedHistory: isBlockscoutConfigured()
+          ? "configured"
+          : isExplorerConfigured()
+            ? "plan-dependent"
+            : "not-configured",
+        indexedExplorer:
+          isExplorerConfigured() || isBlockscoutConfigured()
+            ? "configured"
+            : "not-configured",
+      },
       checkedAt: new Date().toISOString(),
     });
   } catch {

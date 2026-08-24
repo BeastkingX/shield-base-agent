@@ -13,8 +13,18 @@ export type Verdict =
 
 export type TargetType = "wallet" | "contract";
 
+export type EvidenceCategory =
+  | "chain"
+  | "identity"
+  | "history"
+  | "exposure"
+  | "community";
+
+export type EvidenceFactValue = string | number | boolean | null;
+
 export interface EvidenceItem {
   id: string;
+  category: EvidenceCategory;
   label: string;
   status: EvidenceStatus;
   claim: string;
@@ -23,13 +33,19 @@ export interface EvidenceItem {
   blockNumber: string;
   observedAt: string;
   rawValue: string | number | boolean | null;
+  facts?: Record<string, EvidenceFactValue>;
   explorerUrl: string;
+  referenceUrl?: string;
   limitations: string[];
 }
 
 export interface FiredRule {
   id: string;
-  effect: "caution" | "high-risk" | "insufficient-data";
+  effect:
+    | "low-observed-risk"
+    | "caution"
+    | "high-risk"
+    | "insufficient-data";
   explanation: string;
   evidenceIds: string[];
 }
@@ -37,7 +53,7 @@ export interface FiredRule {
 export interface ScanReceipt {
   receiptId: string;
   receiptVersion: "0.1";
-  riskEngineVersion: "0.1";
+  riskEngineVersion: "0.1" | "0.2";
   network: "Base Mainnet";
   chainId: 8453;
   address: string;
