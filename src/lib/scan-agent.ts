@@ -14,6 +14,7 @@ import {
   getContractSourceMetadata,
   type IndexedTransaction,
 } from "./etherscan-client";
+import { parseEip7702Delegation } from "./eip7702";
 import { formatEth, storageValueToAddress } from "./format";
 import {
   getIndexedContractCreation,
@@ -191,7 +192,8 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
   ]);
 
   const normalizedCode = code || "0x";
-  const isContract = normalizedCode !== "0x";
+  const delegationAddress = parseEip7702Delegation(normalizedCode);
+  const isContract = normalizedCode !== "0x" && !delegationAddress;
   const targetType: TargetType = isContract ? "contract" : "wallet";
   const blockTimestamp = new Date(Number(block.timestamp) * 1000).toISOString();
   const context: EvidenceContext = { address, blockNumber, observedAt: scannedAt };
@@ -221,27 +223,51 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     evidence(context, {
       id: "EVIDENCE_TARGET_TYPE",
       category: "identity",
-      label: isContract ? "Smart contract detected" : "Wallet address detected",
+      label: isContract
+        ? "Smart contract detected"
+        : delegationAddress
+          ? "EIP-7702 delegated wallet detected"
+          : "Wallet address detected",
       status: "pass",
       claim: isContract
         ? "Deployed bytecode existed at this address at the scanned block."
-        : "No deployed bytecode existed at this address at the scanned block.",
+        : delegationAddress
+          ? `The account code is an EIP-7702 delegation designator pointing to ${delegationAddress}.`
+          : "No deployed bytecode existed at this address at the scanned block.",
       source: "base-rpc",
       method: "eth_getCode",
-      rawValue: isContract
-        ? `bytecodeBytes=${Math.max(0, (normalizedCode.length - 2) / 2)}`
-        : "0x",
+      rawValue: delegationAddress
+        ? normalizedCode
+        : isContract
+          ? `bytecodeBytes=${Math.max(0, (normalizedCode.length - 2) / 2)}`
+          : "0x",
       facts: {
-        Classification: isContract ? "Smart contract" : "Wallet",
-        "Bytecode bytes": isContract
-          ? Math.max(0, (normalizedCode.length - 2) / 2)
-          : 0,
+        Classification: isContract
+          ? "Smart contract"
+          : delegationAddress
+            ? "Delegated wallet (EIP-7702)"
+            : "Wallet",
+        "Bytecode bytes": Math.max(0, (normalizedCode.length - 2) / 2),
+        "Delegation target": delegationAddress,
+        "Delegation designator bytes": delegationAddress ? 23 : null,
+        "Execution semantics": delegationAddress
+          ? "Calls execute the delegate address's code in this wallet's account context."
+          : null,
+        "Transaction origination": delegationAddress
+          ? "This delegated wallet may still originate transactions."
+          : null,
       },
       limitations: isContract
         ? ["Bytecode presence proves contract deployment, not safety or source verification."]
-        : [
-            "No bytecode normally indicates an externally owned account, but it does not establish who controls it.",
-          ],
+        : delegationAddress
+          ? [
+              "An EIP-7702 wallet can originate transactions while executing code delegated to another address.",
+              "This scan identifies the delegation but does not yet analyze the delegate contract's behavior.",
+              "Delegation is not by itself proof of safety or malicious behavior.",
+            ]
+          : [
+              "No bytecode normally indicates an externally owned account, but it does not establish who controls it.",
+            ],
     }),
   );
 
@@ -293,7 +319,11 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         rawValue: nonceResult.value,
         facts: { "Transaction count": nonceResult.value },
         limitations: [
-          "For contracts, this value does not describe the contract's full interaction history.",
+          isContract
+            ? "For contracts, this value does not describe the contract's full interaction history."
+            : delegationAddress
+              ? "For delegated wallets, this count does not describe every call executed through delegated code."
+              : "A wallet transaction count does not reveal who controls the account or whether its past activity was safe.",
           "Transaction count alone cannot establish trust.",
         ],
       }),
@@ -327,12 +357,12 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           id: "EVIDENCE_PROXY_IMPLEMENTATION",
           category: "identity",
           label: implementationAddress
-            ? "Upgradeable proxy indicator detected"
-            : "No standard proxy implementation found",
+            ? "EIP-1967 implementation detected"
+            : "No EIP-1967 implementation found",
           status: implementationAddress ? "warning" : "pass",
           claim: implementationAddress
             ? `The standard EIP-1967 implementation slot points to ${implementationAddress}.`
-            : "The EIP-1967 implementation slot did not contain an implementation address.",
+            : "The EIP-1967 implementation slot did not contain an implementation address; other proxy patterns remain possible.",
           source: "base-rpc",
           method: "eth_getStorageAt",
           rawValue: implementationAddress,
@@ -372,17 +402,27 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
 
     if (sourceResult.status === "fulfilled") {
       const metadata = sourceResult.value;
+      const explorerReportsProxy = metadata.Proxy === "1";
       items.push(
         evidence(context, {
           id: "EVIDENCE_CONTRACT_VERIFICATION",
           category: "identity",
-          label: metadata.verified
-            ? "Published source code verified"
-            : "Source code is not verified",
-          status: metadata.verified ? "pass" : "warning",
-          claim: metadata.verified
-            ? `${metadata.ContractName || "The contract"} has published source metadata indexed by BaseScan.`
-            : "BaseScan did not return published, verified source code for this contract.",
+          label: explorerReportsProxy
+            ? metadata.verified
+              ? "Published source verified; proxy reported"
+              : "Source unverified; proxy reported"
+            : metadata.verified
+              ? "Published source code verified"
+              : "Source code is not verified",
+          status:
+            metadata.verified && !explorerReportsProxy ? "pass" : "warning",
+          claim: explorerReportsProxy
+            ? metadata.verified
+              ? `${metadata.ContractName || "The contract"} has verified source metadata, and BaseScan reports this address as a proxy.`
+              : "BaseScan did not return published, verified source code and reports this address as a proxy."
+            : metadata.verified
+              ? `${metadata.ContractName || "The contract"} has published source metadata indexed by BaseScan.`
+              : "BaseScan did not return published, verified source code for this contract.",
           source: "etherscan-v2",
           method: "contract.getsourcecode",
           rawValue: metadata.verified,
@@ -398,6 +438,12 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           limitations: [
             "Published source improves transparency but is not a security audit.",
             "Verified code can still contain vulnerabilities or harmful behavior.",
+            ...(explorerReportsProxy
+              ? [
+                  "A proxy is not automatically malicious, but its implementation may be upgradeable or controlled separately.",
+                  "Explorer proxy metadata is indexed evidence and should be checked against live storage and governance controls.",
+                ]
+              : []),
           ],
         }),
       );

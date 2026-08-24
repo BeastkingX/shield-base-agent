@@ -1,52 +1,48 @@
-# Shield Phase 2.3 update
+# Shield Phase 2.4 update
 
-## Activity-route resilience
+## EIP-7702 delegated-wallet classification
 
-- Kept Blockscout's keyed Etherscan-compatible `account.txlist` route as the first source for recent normal transactions.
-- Added Blockscout's keyed Base REST route, `/8453/api/v2/addresses/{address}/transactions`, as an independent fallback when the compatibility route times out, returns HTTP 500, rejects the request, or returns malformed data.
-- Normalizes REST `items` into Shield's existing `IndexedTransaction` shape before deterministic evidence rules run.
-- Preserves conservative behavior: an empty, valid REST `items` list is completed evidence, while failure of both Blockscout routes remains unavailable evidence rather than a safe result.
-- Keeps the API key server-only and sends it to both Blockscout routes without exposing it in receipts or browser code.
-- Updated activity evidence method text so receipts disclose the compatibility-to-REST fallback.
+- Added a strict parser for the EIP-7702 delegation designator: exactly 23 bytes containing `0xef0100` followed by a 20-byte delegate address.
+- Ordinary bytecode, truncated indicators, and longer prefix-matching bytecode remain classified as contract code.
+- An account carrying the exact designator is classified as a delegated wallet under Shield's current `wallet | contract` receipt model, not as an ordinary deployed contract.
+- Target evidence now discloses the delegate address, the 23-byte designator length, execution in the authority wallet's account context, and the fact that the delegated wallet may still originate transactions.
+- Delegated-wallet receipts use wallet-relevant activity and approval evidence. They no longer run source-verification, creation-provenance, or EIP-1967 storage checks against the authority address.
+- Limitations explicitly state that Shield identifies the delegation but does not yet analyze the delegate contract's behavior.
+
+## Honest proxy evidence
+
+- Renamed the negative storage result to **No EIP-1967 implementation found**.
+- The evidence claim now states that an empty EIP-1967 slot does not rule out other proxy patterns.
+- When Etherscan/BaseScan source metadata reports `Proxy=1`, Shield shows **Published source verified; proxy reported**, records the reported implementation, and marks the completed evidence as a warning.
+- The deterministic risk engine therefore returns `CAUTION` for an explorer-reported proxy even when the EIP-1967 slot is empty. This is a review signal, not an allegation that a proxy is malicious.
+- Advanced the receipt risk-engine version to `0.3` so this changed deterministic signal is auditable.
 
 ## Existing evidence behavior retained
 
 - Etherscan V2 remains the server-only source for free verified-source metadata on Base Mainnet (`chainid=8453`).
-- Blockscout remains the preferred provider for free Base creation and activity evidence; Etherscan remains the outer provider fallback when its configured plan supports Base indexed endpoints.
-- The completed evidence item records the provider actually used (`blockscout-pro` or `etherscan-v2`).
-- Exact-address official provenance remains enabled for Base WETH9, an OP Stack protocol predeploy with no ordinary user-submitted creation transaction.
-- Shield never infers official identity from an address prefix and never fabricates a creator, creation hash, or creation block.
-- Deterministic risk rules still require verification, provenance, and activity evidence before a contract can receive `LOW OBSERVED RISK`.
+- Blockscout remains the preferred provider for free Base creation and activity evidence, with compatibility-to-REST fallback for recent normal transactions.
+- Exact-address official provenance remains enabled for Base WETH9.
+- Failed or missing checks remain unavailable rather than being converted into safe results.
+- Verdicts remain limited to `LOW OBSERVED RISK`, `CAUTION`, `HIGH OBSERVED RISK`, and `INSUFFICIENT DATA`.
 
 ## Scan experience
 
-- Advanced the displayed application version to `v0.2.3`.
-- Documented the two Blockscout activity routes and their fallback order in the beginner guide, project specification, and environment example.
-- Existing receipt overview, evidence filters, structured facts, source links, JSON download, and responsive layouts are unchanged.
+- Advanced the displayed application version to `v0.2.4`.
+- Kept the evidence-first receipt UI, filters, structured facts, source links, copy controls, and JSON download.
 
 ## Verification
 
 Completed successfully on August 24, 2026:
 
-- `npm test` — 23 tests passed across six test files.
-- Blockscout tests cover compatibility-route success, REST recovery after compatibility HTTP 500, REST normalization, empty REST history, malformed responses, both-route failure, missing-key behavior, and creation lookup.
+- `npm test` — 27 tests passed across seven test files.
+- New tests cover exact EIP-7702 parsing, rejection of truncated and extended prefix matches, delegated-wallet orchestration, and explorer-reported proxy risk handling without an EIP-1967 slot value.
 - `npm run lint` — completed with no errors.
 - `npx tsc --noEmit` — strict TypeScript validation completed with no errors.
 - `npm run build` — production compilation, TypeScript checks, static generation, and route generation completed successfully.
 
-## User validation
-
-Completed locally on August 24, 2026 with receipt `shield_c40e2a7057891405594f`:
-
-- Scanned official Base WETH9 at block `50371412`.
-- All 8 of 8 evidence checks completed with no unavailable evidence.
-- The deterministic verdict was `LOW OBSERVED RISK`, with the receipt retaining the explicit non-guarantee limitation.
-- Exact official-predeploy provenance completed without inventing an ordinary creator, creation transaction, or creation block.
-- Blockscout returned ten recent normal transactions through `account.txlist`, so the REST fallback did not need to activate during this specific live scan.
-- Automated coverage separately verifies HTTP 500 recovery through REST and conservative unavailable behavior when both Blockscout routes fail.
-
 ## Still intentionally not implemented
 
+- Delegate-contract behavior analysis for EIP-7702 wallets
 - ERC-20 approval exposure
 - Internal calls and token-transfer history
 - Transaction simulation

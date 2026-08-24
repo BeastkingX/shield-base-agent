@@ -18,7 +18,7 @@ A user pastes a Base address. Shield will:
 
 1. Validate the address and confirm Base mainnet.
 2. Record the current block number used for the scan.
-3. Use live RPC data to classify the address as an externally owned account (wallet) or smart contract.
+3. Use live RPC data to classify the address as a wallet, EIP-7702 delegated wallet, or ordinary smart contract. Delegated wallets remain `wallet` targets in the current receipt schema.
 4. Select a relevant scan path for that classification.
 5. Run deterministic checks.
 6. Calculate an observed-risk rating from explicit rules.
@@ -29,7 +29,8 @@ A user pastes a Base address. Shield will:
 
 - Native ETH balance
 - Transaction count/nonce
-- Whether contract bytecode exists
+- Whether the account has no code or an exact 23-byte EIP-7702 delegation designator
+- Delegate address and execution semantics when EIP-7702 delegation is present
 - Recent activity when an indexed-data provider is configured
 - Active ERC-20 approvals when an indexed-data provider is configured
 
@@ -37,7 +38,7 @@ A user pastes a Base address. Shield will:
 
 - Bytecode existence and size
 - Contract verification status when the explorer API is configured
-- Proxy indicators, including standard EIP-1967 storage slots
+- Proxy indicators from standard EIP-1967 storage and explorer metadata; a negative storage-slot result must not be described as proof that no proxy exists
 - Contract deployment provenance: indexed creation for ordinary contracts or exact-match official protocol-predeploy evidence
 - Recent activity when the explorer API is configured
 
@@ -100,7 +101,7 @@ The first version will use versioned, inspectable rules. Example signals include
 - Invalid or unsupported input → insufficient data
 - Explorer/RPC failure → unavailable check, never silently treated as safe
 - Unverified contract → caution, not automatic danger
-- Standard proxy detected → disclosure/caution, not automatic danger
+- Standard or explorer-reported proxy detected → disclosure/caution, not automatic danger
 - Newly created contract plus low activity → caution
 - Active unlimited approval to a high-risk spender → high observed risk when supporting evidence exists
 - Evidence-linked community reports → displayed separately until their claims are reviewed
@@ -180,6 +181,8 @@ We will not attack competing entries or make exclusivity claims that cannot be p
 - [x] Contract verification plus ordinary-creation or official-predeploy provenance
 - [x] Recent normal-transaction evidence
 - [x] Explicit missing-key, API-failure, malformed-response, and empty-history states
+- [x] Strict EIP-7702 delegated-wallet classification and wallet-specific orchestration
+- [x] Honest EIP-1967-negative wording plus explorer-reported proxy caution evidence
 - [ ] Approval exposure checks
 - [ ] AI evidence summarizer with citation enforcement
 

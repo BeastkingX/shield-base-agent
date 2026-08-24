@@ -398,7 +398,7 @@ export default function Home() {
       <footer className="shell">
         <div className="brand"><span className="brandMark">S</span><span>SHIELD</span></div>
         <p>Open evidence for safer decisions on Base.</p>
-        <div><a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a><span>v0.2.3</span></div>
+        <div><a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a><span>v0.2.4</span></div>
       </footer>
     </main>
   );

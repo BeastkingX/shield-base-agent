@@ -53,7 +53,7 @@ export interface FiredRule {
 export interface ScanReceipt {
   receiptId: string;
   receiptVersion: "0.1";
-  riskEngineVersion: "0.1" | "0.2";
+  riskEngineVersion: "0.1" | "0.2" | "0.3";
   network: "Base Mainnet";
   chainId: 8453;
   address: string;

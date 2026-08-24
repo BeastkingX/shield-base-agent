@@ -102,7 +102,7 @@ Copy-Item .env.example .env.local
 
 What this does: it copies the example settings into a private local settings file. Base’s public development RPC works without an account.
 
-A complete Phase 2.3 scan uses two free, server-only explorer keys because the providers have different Base coverage.
+A complete Phase 2.4 scan uses two free, server-only explorer keys because the providers have different Base coverage.
 
 ### Add Etherscan for verified source metadata
 
@@ -205,14 +205,15 @@ npm.cmd run dev
 
 # Current features
 
-Shield Phase 2.3 currently provides:
+Shield Phase 2.4 currently provides:
 
 - Base mainnet RPC health and block-reference checks
 - EVM address validation
 - Wallet-versus-contract classification using `eth_getCode`
+- Strict EIP-7702 delegation-designator detection, including delegate address and wallet execution semantics
 - Native ETH balance and transaction-count reads
-- Standard EIP-1967 proxy implementation-slot check for contracts
-- Verified source metadata from Etherscan V2
+- Standard EIP-1967 proxy implementation-slot check for contracts, without treating an empty slot as proof that no proxy exists
+- Verified source metadata from Etherscan V2, with explorer-reported proxy status surfaced as deterministic caution evidence
 - Free Base creation and activity evidence from Blockscout's keyed PRO API
 - Redundant Blockscout activity retrieval through compatibility and modern REST routes
 - Exact-match official provenance for documented Base/OP Stack protocol predeploys such as WETH9

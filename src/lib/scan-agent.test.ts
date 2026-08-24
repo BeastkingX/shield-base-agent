@@ -129,4 +129,94 @@ describe("Shield scan orchestration", () => {
     expect(receipt.coverage).toEqual({ completed: 8, unavailable: 0, total: 8 });
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });
+
+  it("classifies an EIP-7702 delegation designator as a delegated wallet", async () => {
+    const delegatedWallet =
+      "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" as Address;
+    vi.mocked(baseClient.getCode).mockResolvedValue(
+      "0xef01005a7fc11397e9a8ad41bf10bf13f22b0a63f96f6d" as Hex,
+    );
+    vi.mocked(getIndexedRecentTransactions).mockResolvedValue({
+      provider: "blockscout-pro",
+      data: [],
+      method: "account.txlist",
+    });
+
+    const receipt = await runShieldScan(delegatedWallet);
+    const identity = receipt.evidence.find(
+      (item) => item.id === "EVIDENCE_TARGET_TYPE",
+    );
+
+    expect(receipt.targetType).toBe("wallet");
+    expect(identity).toMatchObject({
+      status: "pass",
+      label: "EIP-7702 delegated wallet detected",
+    });
+    expect(identity?.facts?.["Classification"]).toBe(
+      "Delegated wallet (EIP-7702)",
+    );
+    expect(identity?.facts?.["Delegation target"]).toBe(
+      "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+    );
+    expect(getContractSourceMetadata).not.toHaveBeenCalled();
+    expect(getIndexedContractCreation).not.toHaveBeenCalled();
+    expect(baseClient.getStorageAt).not.toHaveBeenCalled();
+    expect(receipt.coverage).toEqual({ completed: 5, unavailable: 1, total: 6 });
+    expect(receipt.verdict).toBe("INSUFFICIENT DATA");
+  });
+
+  it("surfaces explorer-reported proxies even without an EIP-1967 slot value", async () => {
+    vi.mocked(getContractSourceMetadata).mockResolvedValue({
+      SourceCode: "contract Proxy {}",
+      ABI: "[]",
+      ContractName: "FiatTokenProxy",
+      CompilerVersion: "v0.6.12",
+      CompilerType: "solc",
+      OptimizationUsed: "1",
+      Runs: "10000000",
+      EVMVersion: "Default",
+      LicenseType: "None",
+      Proxy: "1",
+      Implementation: "0x2222222222222222222222222222222222222222",
+      SimilarMatch: "",
+      verified: true,
+    });
+    vi.mocked(getIndexedContractCreation).mockResolvedValue({
+      provider: "blockscout-pro",
+      data: {
+        contractAddress: ADDRESS,
+        contractCreator: "0x3333333333333333333333333333333333333333",
+        txHash: `0x${"a".repeat(64)}`,
+        blockNumber: "100",
+        timestamp: "1700000000",
+        contractFactory: "",
+      },
+    });
+    vi.mocked(getIndexedRecentTransactions).mockResolvedValue({
+      provider: "blockscout-pro",
+      data: [],
+      method: "account.txlist",
+    });
+
+    const receipt = await runShieldScan(ADDRESS);
+    const slotEvidence = receipt.evidence.find(
+      (item) => item.id === "EVIDENCE_PROXY_IMPLEMENTATION",
+    );
+    const sourceEvidence = receipt.evidence.find(
+      (item) => item.id === "EVIDENCE_CONTRACT_VERIFICATION",
+    );
+
+    expect(slotEvidence).toMatchObject({
+      status: "pass",
+      label: "No EIP-1967 implementation found",
+    });
+    expect(sourceEvidence).toMatchObject({
+      status: "warning",
+      label: "Published source verified; proxy reported",
+    });
+    expect(sourceEvidence?.facts?.["Implementation"]).toBe(
+      "0x2222222222222222222222222222222222222222",
+    );
+    expect(receipt.verdict).toBe("CAUTION");
+  });
 });

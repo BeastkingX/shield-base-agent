@@ -5,7 +5,7 @@ import type {
   Verdict,
 } from "./scan-types";
 
-export const RISK_ENGINE_VERSION = "0.2" as const;
+export const RISK_ENGINE_VERSION = "0.3" as const;
 
 interface RiskResult {
   verdict: Verdict;
