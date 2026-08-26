@@ -102,7 +102,7 @@ Copy-Item .env.example .env.local
 
 What this does: it copies the example settings into a private local settings file. Base’s public development RPC works without an account.
 
-A complete Phase 2.4 scan uses two free, server-only explorer keys because the providers have different Base coverage.
+A complete Phase 2.5 scan uses two free, server-only explorer keys because the providers have different Base coverage.
 
 ### Add Etherscan for verified source metadata
 
@@ -205,7 +205,7 @@ npm.cmd run dev
 
 # Current features
 
-Shield Phase 2.4 currently provides:
+Shield Phase 2.5 currently provides:
 
 - Base mainnet RPC health and block-reference checks
 - EVM address validation
@@ -221,6 +221,7 @@ Shield Phase 2.4 currently provides:
 - The ten most recent indexed normal transactions with basic direction and failure summaries
 - Versioned deterministic verdict logic with required evidence gates
 - Evidence categories, structured facts, source methods, block numbers, and limitations
+- A readable evidence typography scale with wrapping claims and responsive expanded details
 - Evidence filters plus copy and JSON receipt download controls
 - Explicit unavailable states for missing keys, provider failures, and checks that have not run
 
