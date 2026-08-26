@@ -205,7 +205,11 @@ npm.cmd run dev
 
 # Current features
 
-Shield Phase 2.5 currently provides:
+Shield Phase 3.0 currently provides:
+
+- Wallet connection through your browser wallet extension (MetaMask, Rabby, Coinbase Wallet, or any EIP-1193 provider), with automatic network detection and a one-click "Switch to Base" action when needed
+- Automatic scan of the connected wallet immediately after connecting, so Shield can advise on the wallet before you act — plus a re-scan button at any time
+- Read-only guarantee: connecting never requests a signature and Shield never sends a transaction; the address box works without any wallet at all
 
 - Base mainnet RPC health and block-reference checks
 - EVM address validation

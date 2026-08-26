@@ -1,12 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   EvidenceCategory,
   EvidenceFactValue,
   EvidenceItem,
   ScanReceipt,
 } from "@/lib/scan-types";
+import { shortAddress } from "@/lib/wallet";
+import WalletPanel from "@/components/WalletPanel";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
@@ -27,10 +29,6 @@ interface Health {
     indexedHistory?: string;
     indexedExplorer?: string;
   };
-}
-
-function shortAddress(value: string): string {
-  return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
 function statusLabel(status: EvidenceItem["status"]): string {
@@ -64,6 +62,7 @@ export default function Home() {
   const [health, setHealth] = useState<Health | null>(null);
   const [filter, setFilter] = useState<"all" | EvidenceCategory>("all");
   const [copied, setCopied] = useState<"address" | "receipt" | "">("");
+  const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -88,8 +87,7 @@ export default function Home() {
     return receipt.evidence.filter((item) => item.category === filter);
   }, [receipt, filter]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const runScan = useCallback(async (target: string) => {
     setScanStage(0);
     setLoading(true);
     setError("");
@@ -99,7 +97,7 @@ export default function Home() {
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
+        body: JSON.stringify({ address: target }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "The scan failed.");
@@ -113,7 +111,25 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runScan(address);
   }
+
+  const handleWalletAddress = useCallback(
+    (account: string) => {
+      setAddress(account);
+      setConnectedAccount(account);
+      void runScan(account);
+    },
+    [runScan],
+  );
+
+  const handleWalletDisconnect = useCallback(() => {
+    setConnectedAccount(null);
+  }, []);
 
   async function copyText(value: string, type: "address" | "receipt") {
     await navigator.clipboard.writeText(value);
@@ -168,6 +184,7 @@ export default function Home() {
         <p className="heroCopy">
           Enter any Base wallet or contract. Shield reads live chain data,
           checks indexed history, and explains a deterministic verdict.
+          Connect your wallet to scan it automatically before you act.
         </p>
 
         <form className="scanPanel" onSubmit={handleSubmit}>
@@ -191,6 +208,13 @@ export default function Home() {
               {loading ? <><span className="spinner" />Scanning</> : "Scan address"}
             </button>
           </div>
+
+          <WalletPanel
+            onAddress={handleWalletAddress}
+            onDisconnect={handleWalletDisconnect}
+            scanning={loading}
+          />
+
           <div className="formMeta">
             <button
               className="textButton"
@@ -199,7 +223,7 @@ export default function Home() {
             >
               Try WETH on Base <span>→</span>
             </button>
-            <span>Read-only · No wallet connection</span>
+            <span>Read-only · Never signs or sends</span>
           </div>
           {loading && (
             <div className="scanProgress" role="status" aria-live="polite">
@@ -226,7 +250,7 @@ export default function Home() {
             <span>Live Base evidence</span>
             <span>Versioned rules</span>
             <span>Exportable receipts</span>
-            <span>No private keys</span>
+            <span>No signatures, ever</span>
           </div>
         )}
       </section>
@@ -238,6 +262,9 @@ export default function Home() {
               <span className="sectionLabel">Analysis complete</span>
               <div className="addressLine">
                 <h2>{shortAddress(receipt.address)}</h2>
+                {connectedAccount === receipt.address && (
+                  <span className="connectedChip">Connected wallet</span>
+                )}
                 <button
                   className="iconButton"
                   type="button"
@@ -398,7 +425,7 @@ export default function Home() {
       <footer className="shell">
         <div className="brand"><span className="brandMark">S</span><span>SHIELD</span></div>
         <p>Open evidence for safer decisions on Base.</p>
-        <div><a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a><span>v0.2.5</span></div>
+        <div><a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a><span>v0.3.0</span></div>
       </footer>
     </main>
   );
