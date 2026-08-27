@@ -593,7 +593,9 @@ export default function Home() {
 
           <div className="receiptFooter">
             <div>
-              <span aria-hidden="true">!</span>
+              <span className="footerAlertIcon" aria-hidden="true">
+                🛡️
+              </span>
               <p>
                 <strong>Decision support, not a guarantee.</strong>{" "}
                 {receipt.limitations.join(" ")}
@@ -601,13 +603,14 @@ export default function Home() {
             </div>
             <button
               type="button"
+              className="startNewScanBtn"
               onClick={() => {
                 setReceipt(null);
                 setAddress("");
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
             >
-              Start a new scan
+              Scan another address ↑
             </button>
           </div>
         </section>
