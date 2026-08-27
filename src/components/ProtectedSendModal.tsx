@@ -164,13 +164,13 @@ export default function ProtectedSendModal({
     try {
       const text = await navigator.clipboard.readText();
       if (text) setRecipient(text.trim());
-    } catch {
-      // Fallback
-    }
+    } catch {}
   };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
     if (!provider || !isAddress(recipient) || !amount || Number(amount) <= 0) {
       setError("Please provide a valid recipient address and amount.");
       return;
@@ -196,7 +196,6 @@ export default function ProtectedSendModal({
       const currentChainId = Number.parseInt(String(currentChainHex), 16);
 
       if (!isBaseChain(currentChainId)) {
-        // Automatically switch wallet to Base Mainnet
         await switchToBase(provider);
       }
 
@@ -402,7 +401,7 @@ export default function ProtectedSendModal({
             </button>
           </div>
 
-          {/* Real-Time Pre-Flight Security Verdict & 6/6 Full Analysis */}
+          {/* Real-Time Pre-Flight Security Verdict & Full Readable Evidence */}
           {recipientScan && (
             <div
               className={`preFlightBox ${
@@ -427,7 +426,7 @@ export default function ProtectedSendModal({
               </div>
               <p className="preFlightSummary">{recipientScan.summary}</p>
 
-              {/* 6/6 Evidence Breakdown Checklist */}
+              {/* 6/6 Readable Checklist */}
               <div className="evidenceChecklist">
                 <div className="checklistHeading">
                   <span>Deterministic Evidence Checks:</span>
@@ -436,40 +435,35 @@ export default function ProtectedSendModal({
                     className="toggleDetailsBtn"
                     onClick={() => setShowFullEvidence(!showFullEvidence)}
                   >
-                    {showFullEvidence ? "Hide Details ▲" : "View 6/6 Breakdown ▼"}
+                    {showFullEvidence ? "Hide Details ▲" : "View Details & Facts ▼"}
                   </button>
                 </div>
 
                 <div className="checkItems">
                   {recipientScan.evidence.map((item: EvidenceItem) => (
-                    <div key={item.id} className={`checkRow status-${item.status}`}>
-                      <span className="checkIcon">
-                        {item.status === "pass" ? "✓" : item.status === "danger" ? "✕" : "•"}
-                      </span>
-                      <span className="checkLabel">{item.label}</span>
-                      <span className="checkClaim">{item.claim}</span>
+                    <div key={item.id} className={`checkCardRow status-${item.status}`}>
+                      <div className="checkHeaderLine">
+                        <span className="checkIconBadge">
+                          {item.status === "pass" ? "✓" : item.status === "danger" ? "✕" : "•"}
+                        </span>
+                        <strong className="checkItemLabel">{item.label}</strong>
+                      </div>
+                      <p className="checkItemClaim">{item.claim}</p>
+
+                      {showFullEvidence && item.facts && Object.keys(item.facts).length > 0 && (
+                        <div className="itemFactsTable">
+                          {Object.entries(item.facts).map(([k, v]) => (
+                            <div key={k} className="factRow">
+                              <span>{k}:</span>
+                              <strong>{String(v)}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* Collapsible Full Facts Breakdown */}
-              {showFullEvidence && (
-                <div className="fullFactsBox">
-                  <strong>On-Chain Facts for Recipient:</strong>
-                  <ul>
-                    {recipientScan.evidence.flatMap((item: EvidenceItem) =>
-                      item.facts
-                        ? Object.entries(item.facts).map(([k, v]) => (
-                            <li key={`${item.id}_${k}`}>
-                              <span>{k}:</span> <strong>{String(v)}</strong>
-                            </li>
-                          ))
-                        : []
-                    )}
-                  </ul>
-                </div>
-              )}
 
               {isSweeper && (
                 <p className="sweeperWarning">
