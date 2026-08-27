@@ -219,10 +219,38 @@ export default function Home() {
             <button
               className="textButton"
               type="button"
-              onClick={() => setAddress(DEMO_CONTRACT)}
+              onClick={() => {
+                setAddress(DEMO_CONTRACT);
+                runScan(DEMO_CONTRACT);
+              }}
             >
               Try WETH on Base <span>→</span>
             </button>
+            <span>·</span>
+            <button
+              className="textButton"
+              type="button"
+              onClick={() => {
+                const addr = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+                setAddress(addr);
+                runScan(addr);
+              }}
+            >
+              Try vitalik.eth (EIP-7702) <span>→</span>
+            </button>
+            <span>·</span>
+            <button
+              className="textButton"
+              type="button"
+              onClick={() => {
+                const addr = "0x7777777777777777777777777777777777777bad";
+                setAddress(addr);
+                runScan(addr);
+              }}
+            >
+              Try Sweeper Bot Trap <span>→</span>
+            </button>
+            <span>·</span>
             <span>Read-only · Never signs or sends</span>
           </div>
           {loading && (

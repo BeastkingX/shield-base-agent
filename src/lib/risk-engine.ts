@@ -32,6 +32,40 @@ export function evaluateRisk(
   const dangerous = evidence.filter((item) => item.status === "danger");
   const warnings = evidence.filter((item) => item.status === "warning");
 
+  // Check for sweeper bot / compromised wallet
+  const sweeperEvidence = evidence.find((item) => item.id === "EVIDENCE_SWEEPER_BOT_ANALYSIS" && item.status === "danger");
+  if (sweeperEvidence) {
+    rules.push({
+      id: "RULE_COMPROMISED_SWEEPER_DETECTED",
+      effect: "high-risk",
+      explanation: "Wallet exhibits rapid automated sweep behavior (<30s). Private key is likely compromised.",
+      evidenceIds: [sweeperEvidence.id],
+    });
+
+    return {
+      verdict: "HIGH OBSERVED RISK",
+      summary: "DO NOT SEND FUNDS: This recipient has an active SWEEPER BOT. Any gas or tokens sent here will be stolen within seconds.",
+      rules,
+    };
+  }
+
+  // Check for drainer cluster taint
+  const clusterEvidence = evidence.find((item) => item.id === "EVIDENCE_MONEY_TRAIL_CLUSTER" && item.status === "danger");
+  if (clusterEvidence) {
+    rules.push({
+      id: "RULE_CRITICAL_DRAINER_DETECTED",
+      effect: "high-risk",
+      explanation: "Target address or its seed gas funder matches known malicious drainer signatures or cluster hubs.",
+      evidenceIds: [clusterEvidence.id],
+    });
+
+    return {
+      verdict: "HIGH OBSERVED RISK",
+      summary: "Shield found a direct link to known phishing drainer infrastructure. Do not interact.",
+      rules,
+    };
+  }
+
   if (dangerous.length > 0) {
     rules.push({
       id: "RULE_DANGEROUS_EVIDENCE",

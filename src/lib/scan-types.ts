@@ -1,3 +1,6 @@
+import type { ClusterAnalysis } from "./cluster-detector";
+import type { ApprovalsSummary } from "./approvals";
+
 export type EvidenceStatus =
   | "pass"
   | "warning"
@@ -50,6 +53,12 @@ export interface FiredRule {
   evidenceIds: string[];
 }
 
+export interface ScanCoverage {
+  completed: number;
+  unavailable: number;
+  total: number;
+}
+
 export interface ScanReceipt {
   receiptId: string;
   receiptVersion: "0.1";
@@ -63,12 +72,10 @@ export interface ScanReceipt {
   scannedAt: string;
   verdict: Verdict;
   summary: string;
-  coverage: {
-    completed: number;
-    unavailable: number;
-    total: number;
-  };
+  coverage: ScanCoverage;
   evidence: EvidenceItem[];
   firedRules: FiredRule[];
   limitations: string[];
+  clusterAnalysis?: ClusterAnalysis;
+  approvalsSummary?: ApprovalsSummary;
 }

@@ -20,6 +20,8 @@ import {
   getIndexedContractCreation,
   getIndexedRecentTransactions,
 } from "./indexed-data";
+import { fetchApprovalsForWallet, type ApprovalsSummary } from "./approvals";
+import { analyzeClusterTaint, type ClusterAnalysis } from "./cluster-detector";
 import { evaluateRisk, RISK_ENGINE_VERSION } from "./risk-engine";
 import type {
   EvidenceCategory,
@@ -119,10 +121,26 @@ function sourceMetadataFailureLimitations(error: unknown): string[] {
       "The missing check was not treated as a safe result.",
     ];
   }
+
+  const providerDetail =
+    error instanceof Error
+      ? error.message.replace(/(?:proapi_|[A-Z0-9]{24,})[A-Za-z0-9_-]*/g, "[redacted]")
+      : null;
   return [
     "Etherscan did not complete the verified-source metadata check.",
+    ...(providerDetail ? [`Provider response: ${providerDetail}`] : []),
     "The failed check was not treated as a safe result.",
   ];
+}
+
+export function parseScanInput(input: unknown): Address {
+  const result = inputSchema.safeParse(input);
+  if (!result.success) {
+    throw new ScanInputError(
+      result.error.issues[0]?.message || "Invalid address supplied.",
+    );
+  }
+  return result.data.address;
 }
 
 function createReceiptId(payload: object): string {
@@ -132,46 +150,36 @@ function createReceiptId(payload: object): string {
   return `shield_${digest.slice(0, 20)}`;
 }
 
-function unixTimestamp(value: string): string | null {
-  const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return new Date(seconds * 1000).toISOString();
-}
-
-function ageInDays(timestamp: string, now: string): number | null {
-  const created = Date.parse(timestamp);
-  const observed = Date.parse(now);
-  if (!Number.isFinite(created) || !Number.isFinite(observed)) return null;
-  return Math.max(0, Math.floor((observed - created) / 86_400_000));
-}
-
 function summarizeTransactions(
   transactions: IndexedTransaction[],
   address: Address,
 ) {
-  const normalizedAddress = address.toLowerCase();
-  const failed = transactions.filter(
-    (transaction) =>
-      transaction.isError === "1" || transaction.txreceipt_status === "0",
-  ).length;
-  const incoming = transactions.filter(
-    (transaction) => transaction.to.toLowerCase() === normalizedAddress,
-  ).length;
-  const outgoing = transactions.filter(
-    (transaction) => transaction.from.toLowerCase() === normalizedAddress,
-  ).length;
-  const latest = transactions[0];
-  const latestAt = latest ? unixTimestamp(latest.timeStamp) : null;
+  const normalized = address.toLowerCase();
+  let failed = 0;
+  let incoming = 0;
+  let outgoing = 0;
 
-  return { failed, incoming, outgoing, latest, latestAt };
-}
-
-export function parseScanInput(input: unknown): Address {
-  const result = inputSchema.safeParse(input);
-  if (!result.success) {
-    throw new ScanInputError(result.error.issues[0]?.message || "Invalid scan input.");
+  for (const transaction of transactions) {
+    if (transaction.isError === "1" || transaction.txreceipt_status === "0") {
+      failed += 1;
+    }
+    if (transaction.to?.toLowerCase() === normalized) {
+      incoming += 1;
+    }
+    if (transaction.from.toLowerCase() === normalized) {
+      outgoing += 1;
+    }
   }
-  return result.data.address;
+
+  return {
+    failed,
+    incoming,
+    outgoing,
+    latest: transactions[0] || null,
+    latestAt: transactions[0]?.timeStamp
+      ? new Date(Number(transactions[0].timeStamp) * 1000).toISOString()
+      : null,
+  };
 }
 
 export async function runShieldScan(address: Address): Promise<ScanReceipt> {
@@ -195,10 +203,13 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
   const delegationAddress = parseEip7702Delegation(normalizedCode);
   const isContract = normalizedCode !== "0x" && !delegationAddress;
   const targetType: TargetType = isContract ? "contract" : "wallet";
+  const protocolPredeploy =
+    targetType === "contract" ? getBaseProtocolContract(address) : null;
   const blockTimestamp = new Date(Number(block.timestamp) * 1000).toISOString();
   const context: EvidenceContext = { address, blockNumber, observedAt: scannedAt };
   const items: EvidenceItem[] = [];
 
+  // EVIDENCE 1: Chain State
   items.push(
     evidence(context, {
       id: "EVIDENCE_CHAIN_STATE",
@@ -215,224 +226,208 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         Block: blockNumber.toString(),
         "Block time": blockTimestamp,
       },
-      limitations: ["The latest block can be reorganized in rare circumstances."],
+      limitations: [
+        "The latest block can be reorganized in rare circumstances.",
+      ],
     }),
   );
 
-  items.push(
-    evidence(context, {
-      id: "EVIDENCE_TARGET_TYPE",
-      category: "identity",
-      label: isContract
-        ? "Smart contract detected"
-        : delegationAddress
-          ? "EIP-7702 delegated wallet detected"
-          : "Wallet address detected",
-      status: "pass",
-      claim: isContract
-        ? "Deployed bytecode existed at this address at the scanned block."
-        : delegationAddress
-          ? `The account code is an EIP-7702 delegation designator pointing to ${delegationAddress}.`
-          : "No deployed bytecode existed at this address at the scanned block.",
-      source: "base-rpc",
-      method: "eth_getCode",
-      rawValue: delegationAddress
-        ? normalizedCode
-        : isContract
-          ? `bytecodeBytes=${Math.max(0, (normalizedCode.length - 2) / 2)}`
-          : "0x",
-      facts: {
-        Classification: isContract
-          ? "Smart contract"
-          : delegationAddress
-            ? "Delegated wallet (EIP-7702)"
-            : "Wallet",
-        "Bytecode bytes": Math.max(0, (normalizedCode.length - 2) / 2),
-        "Delegation target": delegationAddress,
-        "Delegation designator bytes": delegationAddress ? 23 : null,
-        "Execution semantics": delegationAddress
-          ? "Calls execute the delegate address's code in this wallet's account context."
-          : null,
-        "Transaction origination": delegationAddress
-          ? "This delegated wallet may still originate transactions."
-          : null,
-      },
-      limitations: isContract
-        ? ["Bytecode presence proves contract deployment, not safety or source verification."]
-        : delegationAddress
-          ? [
-              "An EIP-7702 wallet can originate transactions while executing code delegated to another address.",
-              "This scan identifies the delegation but does not yet analyze the delegate contract's behavior.",
-              "Delegation is not by itself proof of safety or malicious behavior.",
-            ]
-          : [
-              "No bytecode normally indicates an externally owned account, but it does not establish who controls it.",
-            ],
-    }),
-  );
-
-  const [balanceResult, nonceResult] = await Promise.allSettled([
-    baseClient.getBalance({ address, blockNumber }),
-    baseClient.getTransactionCount({ address, blockNumber }),
-  ]);
-
-  if (balanceResult.status === "fulfilled") {
+  // EVIDENCE 2: Target Type & EIP-7702
+  if (delegationAddress) {
+    const rawByteLength = (normalizedCode.length - 2) / 2;
     items.push(
       evidence(context, {
-        id: "EVIDENCE_NATIVE_BALANCE",
-        category: "chain",
-        label: "Native balance read",
-        status: "info",
-        claim: `The address held ${formatEth(balanceResult.value)} at the scanned block.`,
+        id: "EVIDENCE_TARGET_TYPE",
+        category: "identity",
+        label: "EIP-7702 delegated wallet detected",
+        status: "pass",
+        claim: `The account code is an EIP-7702 delegation designator pointing to ${delegationAddress}.`,
         source: "base-rpc",
-        method: "eth_getBalance",
-        rawValue: balanceResult.value.toString(),
-        facts: { "Native balance": formatEth(balanceResult.value) },
-        limitations: ["Token balances are not included in this value."],
+        method: "eth_getCode",
+        rawValue: normalizedCode,
+        facts: {
+          Classification: "Delegated wallet (EIP-7702)",
+          "Bytecode bytes": rawByteLength,
+          "Delegation target": delegationAddress,
+          "Delegation designator bytes": rawByteLength,
+          "Execution semantics":
+            "Calls execute the delegate address's code in this wallet's account context.",
+          "Transaction origination":
+            "This delegated wallet may still originate transactions.",
+        },
+        limitations: [
+          "An EIP-7702 wallet can originate transactions while executing code delegated to another address.",
+          "This scan identifies the delegation but does not yet analyze the delegate contract's behavior.",
+          "Delegation is not by itself proof of safety or malicious behavior.",
+        ],
       }),
     );
-  } else {
-    items.push(
-      unavailableEvidence(
-        context,
-        "chain",
-        "EVIDENCE_NATIVE_BALANCE",
-        "Native balance unavailable",
-        "Shield could not retrieve the native ETH balance.",
-        "base-rpc",
-        "eth_getBalance",
-        ["This failed check was not treated as a safe result."],
-      ),
-    );
-  }
-
-  if (nonceResult.status === "fulfilled") {
+  } else if (targetType === "contract") {
     items.push(
       evidence(context, {
-        id: "EVIDENCE_TRANSACTION_COUNT",
-        category: "history",
-        label: "Transaction count read",
-        status: "info",
-        claim: `The address had transaction count ${nonceResult.value} at the scanned block.`,
+        id: "EVIDENCE_TARGET_TYPE",
+        category: "identity",
+        label: "Smart contract detected",
+        status: "pass",
+        claim: "Deployed bytecode existed at this address at the scanned block.",
         source: "base-rpc",
-        method: "eth_getTransactionCount",
-        rawValue: nonceResult.value,
-        facts: { "Transaction count": nonceResult.value },
+        method: "eth_getCode",
+        rawValue: `bytecodeBytes=${(normalizedCode.length - 2) / 2}`,
+        facts: {
+          Classification: "Smart contract",
+          "Bytecode bytes": (normalizedCode.length - 2) / 2,
+        },
         limitations: [
-          isContract
-            ? "For contracts, this value does not describe the contract's full interaction history."
-            : delegationAddress
-              ? "For delegated wallets, this count does not describe every call executed through delegated code."
-              : "A wallet transaction count does not reveal who controls the account or whether its past activity was safe.",
-          "Transaction count alone cannot establish trust.",
+          "Bytecode presence proves contract deployment, not safety or source verification.",
         ],
       }),
     );
   } else {
     items.push(
-      unavailableEvidence(
-        context,
-        "history",
-        "EVIDENCE_TRANSACTION_COUNT",
-        "Transaction count unavailable",
-        "Shield could not retrieve the address transaction count.",
-        "base-rpc",
-        "eth_getTransactionCount",
-        ["This failed check was not treated as a safe result."],
-      ),
+      evidence(context, {
+        id: "EVIDENCE_TARGET_TYPE",
+        category: "identity",
+        label: "No deployed bytecode detected",
+        status: "pass",
+        claim: "No contract bytecode was deployed at this address at the scanned block.",
+        source: "base-rpc",
+        method: "eth_getCode",
+        rawValue: null,
+        facts: {
+          Classification: "Standard EOA wallet",
+          "Bytecode bytes": 0,
+        },
+        limitations: [
+          "An address with no code can still be controlled by an automated system or private-key holder.",
+          "Absence of code does not prove that a wallet owner is trustworthy.",
+        ],
+      }),
     );
   }
 
-  if (isContract) {
-    try {
-      const implementationValue = await baseClient.getStorageAt({
-        address,
-        slot: EIP1967_IMPLEMENTATION_SLOT,
-        blockNumber,
-      });
-      const implementationAddress = storageValueToAddress(implementationValue);
+  const [balance, txCount, eip1967Storage] = await Promise.all([
+    baseClient.getBalance({ address, blockNumber }),
+    baseClient.getTransactionCount({ address, blockNumber }),
+    targetType === "contract"
+      ? baseClient.getStorageAt({
+          address,
+          slot: EIP1967_IMPLEMENTATION_SLOT,
+          blockNumber,
+        })
+      : Promise.resolve(null),
+  ]);
 
-      items.push(
-        evidence(context, {
-          id: "EVIDENCE_PROXY_IMPLEMENTATION",
-          category: "identity",
-          label: implementationAddress
-            ? "EIP-1967 implementation detected"
-            : "No EIP-1967 implementation found",
-          status: implementationAddress ? "warning" : "pass",
-          claim: implementationAddress
-            ? `The standard EIP-1967 implementation slot points to ${implementationAddress}.`
-            : "The EIP-1967 implementation slot did not contain an implementation address; other proxy patterns remain possible.",
-          source: "base-rpc",
-          method: "eth_getStorageAt",
-          rawValue: implementationAddress,
-          facts: {
-            "EIP-1967 proxy": Boolean(implementationAddress),
-            Implementation: implementationAddress,
-          },
-          limitations: [
-            "A proxy is not automatically malicious.",
-            "Non-standard proxy patterns may not use this storage slot.",
-          ],
-        }),
-      );
-    } catch {
-      items.push(
-        unavailableEvidence(
-          context,
-          "identity",
-          "EVIDENCE_PROXY_IMPLEMENTATION",
-          "Proxy indicator unavailable",
-          "Shield could not inspect the EIP-1967 implementation slot.",
-          "base-rpc",
-          "eth_getStorageAt",
-          ["Non-standard proxies require additional analysis."],
-        ),
-      );
-    }
+  // EVIDENCE 3: Native Balance
+  items.push(
+    evidence(context, {
+      id: "EVIDENCE_NATIVE_BALANCE",
+      category: "chain",
+      label: "Native balance read",
+      status: "info",
+      claim: `The address held ${formatEth(balance)} ETH at the scanned block.`,
+      source: "base-rpc",
+      method: "eth_getBalance",
+      rawValue: balance.toString(),
+      facts: {
+        "Native balance": `${formatEth(balance)} ETH`,
+      },
+      limitations: ["Token balances are not included in this value."],
+    }),
+  );
 
-    const protocolContract = getBaseProtocolContract(address);
-    const [sourceResult, creationResult, historyResult] = await Promise.allSettled([
+  // EVIDENCE 4: Transaction Count
+  items.push(
+    evidence(context, {
+      id: "EVIDENCE_TRANSACTION_COUNT",
+      category: "history",
+      label: "Transaction count read",
+      status: "info",
+      claim: `The address had transaction count ${txCount} at the scanned block.`,
+      source: "base-rpc",
+      method: "eth_getTransactionCount",
+      rawValue: txCount,
+      facts: {
+        "Transaction count": txCount,
+      },
+      limitations: [
+        targetType === "contract"
+          ? "For contracts, this value does not describe the contract's full interaction history."
+          : delegationAddress
+            ? "For delegated wallets, this count does not describe every call executed through delegated code."
+            : "Transaction count alone cannot establish trust.",
+      ],
+    }),
+  );
+
+  let clusterAnalysis: ClusterAnalysis | undefined;
+  let approvalsSummary: ApprovalsSummary | undefined;
+
+  // CONTRACT PATH
+  if (targetType === "contract") {
+    const implementationAddress = storageValueToAddress(eip1967Storage ?? undefined);
+    items.push(
+      evidence(context, {
+        id: "EVIDENCE_PROXY_IMPLEMENTATION",
+        category: "identity",
+        label: implementationAddress
+          ? "Standard proxy implementation slot identified"
+          : "No EIP-1967 implementation found",
+        status: "pass",
+        claim: implementationAddress
+          ? `The EIP-1967 implementation slot contained ${implementationAddress}.`
+          : "The EIP-1967 implementation slot did not contain an implementation address; other proxy patterns remain possible.",
+        source: "base-rpc",
+        method: "eth_getStorageAt",
+        rawValue: implementationAddress,
+        facts: {
+          "EIP-1967 proxy": Boolean(implementationAddress),
+          Implementation: implementationAddress,
+        },
+        limitations: [
+          "A proxy is not automatically malicious.",
+          "Non-standard proxy patterns may not use this storage slot.",
+        ],
+      }),
+    );
+
+    const sourceResult = await Promise.allSettled([
       getContractSourceMetadata(address),
-      protocolContract
-        ? Promise.resolve(null)
-        : getIndexedContractCreation(address),
-      getIndexedRecentTransactions(address),
     ]);
+    const sourceRes = sourceResult[0];
 
-    if (sourceResult.status === "fulfilled") {
-      const metadata = sourceResult.value;
-      const explorerReportsProxy = metadata.Proxy === "1";
+    if (sourceRes.status === "fulfilled") {
+      const source = sourceRes.value;
+      const isVerified = source.verified;
+      const explorerReportsProxy = source.Proxy === "1";
       items.push(
         evidence(context, {
           id: "EVIDENCE_CONTRACT_VERIFICATION",
           category: "identity",
           label: explorerReportsProxy
-            ? metadata.verified
+            ? isVerified
               ? "Published source verified; proxy reported"
               : "Source unverified; proxy reported"
-            : metadata.verified
+            : isVerified
               ? "Published source code verified"
-              : "Source code is not verified",
-          status:
-            metadata.verified && !explorerReportsProxy ? "pass" : "warning",
+              : "No verified source code published",
+          status: isVerified && !explorerReportsProxy ? "pass" : "warning",
           claim: explorerReportsProxy
-            ? metadata.verified
-              ? `${metadata.ContractName || "The contract"} has verified source metadata, and BaseScan reports this address as a proxy.`
+            ? isVerified
+              ? `${source.ContractName || "The contract"} has verified source metadata, and BaseScan reports this address as a proxy.`
               : "BaseScan did not return published, verified source code and reports this address as a proxy."
-            : metadata.verified
-              ? `${metadata.ContractName || "The contract"} has published source metadata indexed by BaseScan.`
-              : "BaseScan did not return published, verified source code for this contract.",
+            : isVerified
+              ? `${source.ContractName || "The contract"} has published source metadata indexed by BaseScan.`
+              : "No verified source code was found on the block explorer.",
           source: "etherscan-v2",
           method: "contract.getsourcecode",
-          rawValue: metadata.verified,
+          rawValue: isVerified,
           facts: {
-            Verified: metadata.verified,
-            "Contract name": metadata.ContractName || "Not published",
-            Compiler: metadata.CompilerVersion || "Not published",
-            License: metadata.LicenseType || "Not published",
-            "Explorer proxy flag": metadata.Proxy === "1",
-            Implementation: metadata.Implementation || null,
+            Verified: isVerified,
+            "Contract name": source.ContractName || "Not published",
+            Compiler: source.CompilerVersion || "Not published",
+            License: source.LicenseType || "Not published",
+            "Explorer proxy flag": explorerReportsProxy,
+            Implementation: source.Implementation || implementationAddress,
           },
           referenceUrl: `${addressExplorerUrl(address)}#code`,
           limitations: [
@@ -453,98 +448,90 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           context,
           "identity",
           "EVIDENCE_CONTRACT_VERIFICATION",
-          "Contract verification unavailable",
-          "Shield could not retrieve verified-source metadata.",
+          "Contract verification status unavailable",
+          "Shield could not inspect verified source metadata.",
           "etherscan-v2",
           "contract.getsourcecode",
-          sourceMetadataFailureLimitations(sourceResult.reason),
+          sourceMetadataFailureLimitations(sourceRes.reason),
         ),
       );
     }
 
-    if (protocolContract) {
+    if (protocolPredeploy) {
       items.push(
         evidence(context, {
           id: "EVIDENCE_CONTRACT_CREATION",
           category: "history",
           label: "Official protocol predeploy identified",
           status: "pass",
-          claim: `${protocolContract.name} matches the exact Base registry address and is specified as an OP Stack protocol predeploy.`,
+          claim: `${protocolPredeploy.name} matches the exact Base registry address and is specified as an OP Stack protocol predeploy.`,
           source: "base-official-registry",
           method: "exact address match + OP Stack predeploy specification",
-          rawValue: `${protocolContract.deploymentMechanism}:${protocolContract.name}`,
+          rawValue: `protocol-predeploy:${protocolPredeploy.name}`,
           facts: {
-            Contract: protocolContract.name,
+            Contract: protocolPredeploy.name,
             "Deployment mechanism": "Protocol predeploy",
             "Ordinary creation transaction": "Not applicable",
             "Official address match": true,
-            Introduced: protocolContract.introduced,
-            "Proxied by specification": protocolContract.proxied,
-            "Protocol specification": protocolContract.protocolSpecificationUrl,
+            Introduced: protocolPredeploy.introduced,
+            "Proxied by specification": protocolPredeploy.proxied,
+            "Protocol specification": protocolPredeploy.protocolSpecificationUrl,
           },
-          referenceUrl: protocolContract.baseRegistryUrl,
+          referenceUrl: protocolPredeploy.baseRegistryUrl,
           limitations: [
-            "Protocol predeploys are initialized in network state rather than through an ordinary user-submitted contract-creation transaction.",
-            "An official address match establishes deployment provenance, not a guarantee that every interaction is safe.",
-          ],
-        }),
-      );
-    } else if (
-      creationResult.status === "fulfilled" &&
-      creationResult.value
-    ) {
-      const { data: creation, provider } = creationResult.value;
-      const createdAt = unixTimestamp(creation.timestamp);
-      const ageDays = createdAt ? ageInDays(createdAt, scannedAt) : null;
-      items.push(
-        evidence(context, {
-          id: "EVIDENCE_CONTRACT_CREATION",
-          category: "history",
-          label: "Contract creation traced",
-          status: "info",
-          claim: createdAt
-            ? `The contract was created ${ageDays?.toLocaleString() ?? "an unknown number of"} days ago by ${creation.contractCreator}.`
-            : `The creation transaction points to deployer ${creation.contractCreator}.`,
-          source: provider,
-          method: "contract.getcontractcreation",
-          rawValue: creation.txHash,
-          facts: {
-            Creator: creation.contractCreator,
-            "Creation transaction": creation.txHash,
-            "Creation block": creation.blockNumber,
-            "Created at": createdAt,
-            "Age in days": ageDays,
-            Factory: creation.contractFactory || null,
-          },
-          referenceUrl: `https://basescan.org/tx/${creation.txHash}`,
-          limitations: [
-            "The deployer address may itself be a factory or contract.",
-            "Contract age alone does not establish safety.",
+            "Protocol predeploys are initialized in network state rather than through an ordinary user-submitted transaction.",
           ],
         }),
       );
     } else {
-      items.push(
-        unavailableEvidence(
-          context,
-          "history",
-          "EVIDENCE_CONTRACT_CREATION",
-          "Contract creation unavailable",
-          "Shield could not retrieve the indexed creation record.",
-          "indexed-provider-fallback",
-          "contract.getcontractcreation",
-          creationResult.status === "rejected"
-            ? explorerFailureLimitations(creationResult.reason)
-            : [
-                "No indexed creation record or official protocol provenance was available.",
-                "The missing check was not treated as a safe result.",
-              ],
-        ),
-      );
+      const creationResult = await Promise.allSettled([
+        getIndexedContractCreation(address),
+      ]);
+      const creationRes = creationResult[0];
+
+      if (creationRes.status === "fulfilled") {
+        const { data: creation, provider } = creationRes.value;
+        items.push(
+          evidence(context, {
+            id: "EVIDENCE_CONTRACT_CREATION",
+            category: "history",
+            label: "Contract creation traced",
+            status: "info",
+            claim: `The contract was created by ${creation.contractCreator}.`,
+            source: provider,
+            method: "contract.getcontractcreation",
+            rawValue: creation.txHash,
+            facts: {
+              Creator: creation.contractCreator,
+              "Creation transaction": creation.txHash,
+            },
+            referenceUrl: `https://basescan.org/tx/${creation.txHash}`,
+            limitations: ["Contract age alone does not establish safety."],
+          }),
+        );
+      } else {
+        items.push(
+          unavailableEvidence(
+            context,
+            "history",
+            "EVIDENCE_CONTRACT_CREATION",
+            "Contract creation metadata unavailable",
+            "Shield could not retrieve the contract's creation transaction.",
+            "indexed-provider-fallback",
+            "contract.getcontractcreation",
+            explorerFailureLimitations(creationRes.reason),
+          ),
+        );
+      }
     }
 
-    if (historyResult.status === "fulfilled") {
-      const { data: transactions, provider, method } = historyResult.value;
+    const historyResult = await Promise.allSettled([
+      getIndexedRecentTransactions(address),
+    ]);
+    const historyRes = historyResult[0];
+
+    if (historyRes.status === "fulfilled") {
+      const { data: transactions, provider, method } = historyRes.value;
       const summary = summarizeTransactions(transactions, address);
       items.push(
         evidence(context, {
@@ -555,7 +542,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             : "No normal transactions returned",
           status: "info",
           claim: transactions.length
-            ? `Shield inspected the ${transactions.length} most recent indexed normal transactions; ${summary.failed} were marked failed.`
+            ? `Shield inspected ${transactions.length} recent normal transactions; ${summary.failed} were marked failed.`
             : "The explorer returned no normal transactions for this address.",
           source: provider,
           method,
@@ -566,15 +553,12 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             Incoming: summary.incoming,
             Outgoing: summary.outgoing,
             "Latest activity": summary.latestAt,
-            "Latest method":
-              summary.latest?.functionName || summary.latest?.methodId || null,
           },
           referenceUrl: summary.latest
             ? `https://basescan.org/tx/${summary.latest.hash}`
             : addressExplorerUrl(address),
           limitations: [
             "Only the latest ten normal transactions were inspected.",
-            "Internal calls and token-transfer events require separate checks.",
           ],
         }),
       );
@@ -588,18 +572,19 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           "Shield could not retrieve recent normal transactions.",
           "indexed-provider-fallback",
           "account.txlist + Blockscout REST address-transactions fallback",
-          explorerFailureLimitations(historyResult.reason),
+          explorerFailureLimitations(historyRes.reason),
         ),
       );
     }
   } else {
+    // WALLET PATH
     const historyResult = await Promise.allSettled([
       getIndexedRecentTransactions(address),
     ]);
-    const result = historyResult[0];
+    const walletHistoryRes = historyResult[0];
 
-    if (result.status === "fulfilled") {
-      const { data: transactions, provider, method } = result.value;
+    if (walletHistoryRes.status === "fulfilled") {
+      const { data: transactions, provider, method } = walletHistoryRes.value;
       const summary = summarizeTransactions(transactions, address);
       items.push(
         evidence(context, {
@@ -641,23 +626,104 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           "Shield could not retrieve recent wallet transactions.",
           "indexed-provider-fallback",
           "account.txlist + Blockscout REST address-transactions fallback",
-          explorerFailureLimitations(result.reason),
+          explorerFailureLimitations(walletHistoryRes.reason),
         ),
       );
     }
 
+    // Token Approvals Check
+    approvalsSummary = await fetchApprovalsForWallet(address);
+    const hasApprovals = approvalsSummary && approvalsSummary.totalCount > 0;
+    const hasHighRiskSpender = approvalsSummary && approvalsSummary.highRiskCount > 0;
+
+    if (hasApprovals) {
+      items.push(
+        evidence(context, {
+          id: "EVIDENCE_ACTIVE_APPROVALS",
+          category: "exposure",
+          label: `Active approvals audited (${approvalsSummary.totalCount} active, ${approvalsSummary.unlimitedCount} unlimited)`,
+          status: hasHighRiskSpender ? "danger" : approvalsSummary.unlimitedCount > 0 ? "info" : "pass",
+          claim: `Shield indexed ${approvalsSummary.totalCount} active token approvals across ${approvalsSummary.uniqueTokensCount} tokens (${approvalsSummary.unlimitedCount} unlimited allowances).`,
+          source: "blockscout-approval-index + base-rpc",
+          method: "Approval events + allowance probe",
+          rawValue: approvalsSummary.totalCount,
+          facts: {
+            "Total active approvals": approvalsSummary.totalCount,
+            "Unlimited allowances": approvalsSummary.unlimitedCount,
+            "Unique tokens": approvalsSummary.uniqueTokensCount,
+            "Unique spenders": approvalsSummary.uniqueSpendersCount,
+            "High-risk spenders": approvalsSummary.highRiskCount,
+          },
+          limitations: [
+            "Token approvals allow external contracts to transfer tokens up to the approved allowance.",
+            "Users should regularly audit and revoke allowances for inactive dApps.",
+          ],
+        }),
+      );
+    } else {
+      items.push(
+        unavailableEvidence(
+          context,
+          "exposure",
+          "EVIDENCE_ACTIVE_APPROVALS",
+          "Active approvals not checked",
+          "Approval exposure requires indexed Approval events and live allowance checks.",
+          "indexed-events + base-rpc",
+          "Approval events + eth_call",
+          ["No conclusion about token approvals was made by this scan."],
+        ),
+      );
+    }
+  }
+
+  // 2-Hop Money Trail & Sweeper Bot Analysis (if cluster anomaly present)
+  clusterAnalysis = await analyzeClusterTaint(address);
+  if (clusterAnalysis.hasTaint || clusterAnalysis.isSweeperActive) {
     items.push(
-      unavailableEvidence(
-        context,
-        "exposure",
-        "EVIDENCE_ACTIVE_APPROVALS",
-        "Active approvals not checked",
-        "Approval exposure requires indexed Approval events and live allowance checks.",
-        "indexed-events + base-rpc",
-        "Approval events + eth_call",
-        ["No conclusion about token approvals was made by this scan."],
-      ),
+      evidence(context, {
+        id: "EVIDENCE_MONEY_TRAIL_CLUSTER",
+        category: "history",
+        label: `Adversarial cluster taint detected (${clusterAnalysis.clusterTaintName})`,
+        status: "danger",
+        claim: `Multi-hop traversal connected this address to ${clusterAnalysis.clusterTaintName}. Seed funder: ${clusterAnalysis.seedFunder}.`,
+        source: "shield-cluster-traversal",
+        method: "1-Hop Upstream Funder + 1-Hop Downstream Sweep Hub",
+        rawValue: clusterAnalysis.clusterTaintName || "tainted",
+        facts: {
+          "Upstream Funder": clusterAnalysis.moneyTrailGraph.upstreamFunder,
+          "Funder Identity": clusterAnalysis.moneyTrailGraph.funderType,
+          "Downstream Loot Hub": clusterAnalysis.moneyTrailGraph.downstreamHub,
+          "Hub Identity": clusterAnalysis.moneyTrailGraph.hubType,
+          "Cluster Affiliation": clusterAnalysis.clusterTaintName || "None",
+        },
+        limitations: [
+          "Graph analysis evaluates 1-2 hop deterministic fund flows on Base.",
+        ],
+      }),
     );
+
+    if (clusterAnalysis.isSweeperActive) {
+      items.push(
+        evidence(context, {
+          id: "EVIDENCE_SWEEPER_BOT_ANALYSIS",
+          category: "identity",
+          label: `ACTIVE SWEEPER BOT DETECTED (Drains within ${clusterAnalysis.sweepVelocitySeconds}s)`,
+          status: "danger",
+          claim: `CRITICAL: Deposits to this wallet are automatically drained within ${clusterAnalysis.sweepVelocitySeconds} seconds by an automated sweeper bot.`,
+          source: "shield-velocity-detector",
+          method: "Inter-block deposit-to-sweep delta analysis",
+          rawValue: clusterAnalysis.isSweeperActive,
+          facts: {
+            "Sweeper Bot Active": "YES (CRITICAL HAZARD)",
+            "Sweep Velocity": `${clusterAnalysis.sweepVelocitySeconds} seconds`,
+            "Compromise Risk Level": "HIGH - KEY LIKELY COMPROMISED",
+          },
+          limitations: [
+            "A leaked private key with zero on-chain activity cannot be detected until an interaction or sweep occurs.",
+          ],
+        }),
+      );
+    }
   }
 
   const risk = evaluateRisk(targetType, items);
@@ -684,6 +750,8 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       "This version does not simulate transactions or inspect every historical event.",
       "Never share a private key or wallet recovery phrase with Shield.",
     ],
+    clusterAnalysis,
+    approvalsSummary,
   };
 
   return {
