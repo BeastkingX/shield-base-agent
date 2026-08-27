@@ -218,6 +218,7 @@ export default function Home() {
             onAddress={handleWalletAddress}
             onDisconnect={handleWalletDisconnect}
             scanning={loading}
+            onOpenSendModal={() => setShowProtectedSend(true)}
           />
 
           <div className="formMeta">

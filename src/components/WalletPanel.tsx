@@ -20,6 +20,8 @@ interface WalletPanelProps {
   onDisconnect: () => void;
   /** True while a scan is running (disables the panel actions). */
   scanning: boolean;
+  /** Called when the user clicks Protected Send */
+  onOpenSendModal?: () => void;
 }
 
 type WalletStatus = "checking" | "idle" | "connecting" | "connected" | "unsupported";
@@ -28,6 +30,7 @@ export default function WalletPanel({
   onAddress,
   onDisconnect,
   scanning,
+  onOpenSendModal,
 }: WalletPanelProps) {
   const [status, setStatus] = useState<WalletStatus>("checking");
   const [address, setAddress] = useState("");
@@ -37,7 +40,6 @@ export default function WalletPanel({
   const [switching, setSwitching] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
-  const [showSendModal, setShowSendModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,7 +226,7 @@ export default function WalletPanel({
           <button
             className="primaryAction"
             type="button"
-            onClick={() => setShowSendModal(true)}
+            onClick={() => onOpenSendModal?.()}
           >
             🛡️ Protected Send
           </button>
@@ -244,14 +246,6 @@ export default function WalletPanel({
       <p className="walletNote" role="status">
         Connected to Base Mainnet. Use <strong>Protected Send</strong> to verify any recipient address before broadcasting.
       </p>
-
-      {/* Protected Send Modal */}
-      <ProtectedSendModal
-        isOpen={showSendModal}
-        onClose={() => setShowSendModal(false)}
-        senderAddress={address}
-        provider={provider}
-      />
     </div>
   );
 }
