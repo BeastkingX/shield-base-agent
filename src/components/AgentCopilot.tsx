@@ -9,8 +9,10 @@ interface AgentCopilotProps {
 }
 
 interface ChatMessage {
+  id: string;
   role: "user" | "agent";
   text: string;
+  timestamp: string;
 }
 
 /**
@@ -27,11 +29,9 @@ function FormattedMessage({ text }: { text: string }) {
           return <div key={lineIdx} className="lineSpacer" />;
         }
 
-        // Bullet point
         const isBullet = line.trim().startsWith("•") || line.trim().startsWith("-");
         const cleanLine = isBullet ? line.trim().replace(/^[•-]\s*/, "") : line;
 
-        // Parse **bold** and `code`
         const parts = [];
         let current = cleanLine;
         let key = 0;
@@ -88,6 +88,7 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isSweeper = receipt.clusterAnalysis?.isSweeperActive;
@@ -95,13 +96,6 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
   const isEip7702 = receipt.evidence.some((e) => e.id === "EVIDENCE_TARGET_TYPE" && e.label.includes("EIP-7702"));
   const approvalsCount = receipt.approvalsSummary?.totalCount || 0;
   const unlimitedCount = receipt.approvalsSummary?.unlimitedCount || 0;
-
-  // Auto-trigger question from carousel
-  useEffect(() => {
-    if (initialQuestion && initialQuestion.trim()) {
-      handleAsk(initialQuestion.trim());
-    }
-  }, [initialQuestion]);
 
   // Default AI Detective Executive Summary
   const defaultSummary = (() => {
@@ -131,17 +125,43 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
     "How do I revoke allowances?",
   ];
 
+  // Auto-trigger question from carousel
+  useEffect(() => {
+    if (initialQuestion && initialQuestion.trim()) {
+      handleAsk(initialQuestion.trim());
+    }
+  }, [initialQuestion]);
+
   // Auto-scroll on new message
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory]);
+  }, [chatHistory, loading]);
+
+  const handleCopyMessage = async (msgId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 1500);
+    } catch {}
+  };
+
+  const handleClearChat = () => {
+    setChatHistory([]);
+  };
 
   const handleAsk = async (queryText?: string) => {
     const text = queryText || question;
     if (!text.trim() || loading) return;
 
     const userMessage = text.trim();
-    setChatHistory((prev) => [...prev, { role: "user", text: userMessage }]);
+    const userMsgObj: ChatMessage = {
+      id: `user_${Date.now()}`,
+      role: "user",
+      text: userMessage,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setChatHistory((prev) => [...prev, userMsgObj]);
     setQuestion("");
     setLoading(true);
 
@@ -152,12 +172,19 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         body: JSON.stringify({
           message: userMessage,
           receipt,
+          history: chatHistory.slice(-4),
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setChatHistory((prev) => [...prev, { role: "agent", text: data.reply }]);
+        const agentMsgObj: ChatMessage = {
+          id: `agent_${Date.now()}`,
+          role: "agent",
+          text: data.reply,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setChatHistory((prev) => [...prev, agentMsgObj]);
       } else {
         throw new Error("Failed to reach AI Detective.");
       }
@@ -165,8 +192,10 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
       setChatHistory((prev) => [
         ...prev,
         {
+          id: `agent_${Date.now()}`,
           role: "agent",
-          text: `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}. Verdict: **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed).`,
+          text: `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed).\n• **Recommendation:** Safe for standard transactions with normal operational precautions.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
     } finally {
@@ -176,17 +205,26 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
 
   return (
     <div className="agentCopilot">
+      {/* Copilot Header */}
       <div className="agentHeader">
         <div className="agentTitle">
           <span className="agentBadge">AI Security Detective</span>
-          <h4>Shield Agent Copilot</h4>
+          <h4>Shield Copilot Intelligence</h4>
         </div>
-        <div className="agentStatus">
-          <span className="liveDot" />
-          <span>Active on Base #{Number(receipt.blockNumber).toLocaleString()}</span>
+        <div className="copilotHeaderActions">
+          <div className="agentStatus">
+            <span className="liveDot" />
+            <span>Active on Base #{Number(receipt.blockNumber).toLocaleString()}</span>
+          </div>
+          {chatHistory.length > 0 && (
+            <button type="button" className="clearChatBtn" onClick={handleClearChat} title="Reset conversation">
+              Reset ↻
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Default Summary Box */}
       <div className="agentSummaryBox">
         <div className="agentIcon">🤖</div>
         <div className="agentText">
@@ -194,18 +232,42 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         </div>
       </div>
 
+      {/* Conversational Feed */}
       {chatHistory.length > 0 && (
         <div className="agentChatFeed">
-          {chatHistory.map((item, index) => (
-            <div key={index} className={`chatBubble bubble-${item.role}`}>
-              <strong className="bubbleRole">{item.role === "user" ? "You" : "Shield AI"}</strong>
+          {chatHistory.map((item) => (
+            <div key={item.id} className={`chatBubble bubble-${item.role}`}>
+              <div className="bubbleTopLine">
+                <strong className="bubbleRole">{item.role === "user" ? "You" : "Shield AI"}</strong>
+                {item.role === "agent" && (
+                  <button
+                    type="button"
+                    className="copyBubbleBtn"
+                    onClick={() => handleCopyMessage(item.id, item.text)}
+                  >
+                    {copiedId === item.id ? "Copied ✓" : "Copy 📋"}
+                  </button>
+                )}
+              </div>
               <FormattedMessage text={item.text} />
+              <span className="bubbleTime">{item.timestamp}</span>
             </div>
           ))}
+          {loading && (
+            <div className="chatBubble bubble-agent agentTypingBubble">
+              <span className="typingIndicator">
+                <span className="dot" />
+                <span className="dot" />
+                <span className="dot" />
+              </span>
+              <span className="typingText">Shield AI is synthesizing on-chain evidence…</span>
+            </div>
+          )}
           <div ref={chatEndRef} />
         </div>
       )}
 
+      {/* Quick Prompts */}
       <div className="agentQuickPrompts">
         <span>Quick queries:</span>
         {quickPrompts.map((p) => (
@@ -215,6 +277,7 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         ))}
       </div>
 
+      {/* Input Row */}
       <form
         className="agentInputRow"
         onSubmit={(e) => {
@@ -226,10 +289,10 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask Shield AI (e.g. 'Is it safe to send 1 ETH?')..."
+          placeholder="Ask Shield AI (e.g. 'Is it safe to pay for an invoice?')..."
         />
         <button type="submit" disabled={!question.trim() || loading}>
-          {loading ? "Analyzing..." : "Ask Agent"}
+          {loading ? "Reasoning…" : "Ask Agent"}
         </button>
       </form>
     </div>

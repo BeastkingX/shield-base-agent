@@ -35,9 +35,17 @@ export async function POST(request: NextRequest) {
           : "https://api.openai.com/v1/chat/completions";
         const model = isGroq ? "qwen/qwen3.8-27b" : "gpt-4o-mini";
 
-        const systemPrompt = `You are Shield AI Guardian, an autonomous Web3 and Base Mainnet security detective. 
-Your goal is to protect users from phishing drainers, sweeper bots, compromised wallets, and malicious token contracts.
-Always format your output in clean, readable markdown (use bold **labels**, bullet points •, and clean linebreaks). Do not use excessive asterisks.
+        const systemPrompt = `You are Shield AI Guardian, an elite autonomous Web3 and Base Mainnet security detective. 
+Your mission is to protect users from phishing drainers, sweeper bots, compromised wallets, and malicious token contracts.
+
+Follow these strict output guidelines:
+1. Always format responses in clean, beautiful markdown. Use bold **headers**, clean bullet points (•), and numbered action steps.
+2. Structure your security analysis into:
+   - **Verdict & Threat Level** (e.g. LOW OBSERVED RISK, CAUTION, or CRITICAL DANGER)
+   - **On-Chain Evidence Findings** (citing exact block numbers, balances, nonces, and money-trail links)
+   - **Actionable Advice** (clear steps for the user before signing or sending)
+3. Do NOT use excessive asterisks or raw markdown syntax errors.
+
 Context of currently scanned address on Base Mainnet:
 ${
   receipt
@@ -58,7 +66,7 @@ ${
         clusterAnalysis: receipt.clusterAnalysis,
         approvalsSummary: receipt.approvalsSummary,
       })
-    : "No specific address scanned yet. Answer general Web3/Base security education questions."
+    : "No specific address scanned yet. Provide comprehensive Web3/Base security education."
 }`;
 
         const res = await fetch(endpoint, {
@@ -77,8 +85,8 @@ ${
               })),
               { role: "user", content: message },
             ],
-            temperature: 0.3,
-            max_tokens: 650,
+            temperature: 0.25,
+            max_tokens: 700,
           }),
           signal: AbortSignal.timeout(8000),
         });
@@ -115,12 +123,12 @@ function generateAutonomousSecurityReasoning(userPrompt: string, receipt?: ScanR
 
   // Sweeper Bots
   if (prompt.includes("sweeper") || prompt.includes("compromised key") || prompt.includes("drain gas")) {
-    return `🤖 **HOW SWEEPER BOTS WORK & HOW TO PROTECT YOURSELF:**\n\nWhen a wallet's private key is leaked, hackers install an automated **Sweeper Bot** that monitors the mempool 24/7.\n\n• **The Attack Mechanism:** The moment you send gas, the bot detects the pending deposit and broadcasts an outgoing transfer in the same or next block (<8 seconds), stealing the funds immediately.\n• **How Shield Protects You:** Shield tracks deposit-to-sweep velocity. If an address exhibits immediate sweeps, Shield fires **🚨 CRITICAL DANGER: Active Sweeper Bot** and blocks the transaction.\n• **Safety Rule:** Never send rescue gas to a compromised wallet using standard transfers.`;
+    return `🤖 **HOW SWEEPER BOTS WORK & HOW TO PROTECT YOURSELF:**\n\nWhen a wallet's private key is leaked, hackers install an automated **Sweeper Bot** that monitors the mempool 24/7.\n\n• **The Attack Mechanism:** The moment you send gas, the bot detects the pending deposit and broadcasts an outgoing transfer in the same or next block (<8 seconds), stealing the funds immediately.\n• **How Shield Protects You:** Shield tracks deposit-to-sweep velocity. If an address exhibits immediate sweeps, Shield fires **🚨 CRITICAL DANGER: Active Sweeper Bot** and blocks the transaction.\n• **Safety Rule:** Never send rescue gas to a compromised wallet using standard transfers. Use flashbots/private bundles or abandon the address.`;
   }
 
   // Ostium Hack
   if (prompt.includes("ostium") || prompt.includes("oracle") || prompt.includes("forwarder")) {
-    return `🔍 **CASE STUDY: THE $23.75M OSTIUM HACK:**\n\nOn July 15, on-chain perpetuals exchange Ostium lost **$23.75M USDC** from its liquidity vault without a single bug in its smart contract code!\n\n• **What Happened:** An off-chain price oracle signer key (\`PriceUpKeep\`) was compromised. The attacker fed fabricated Bitcoin prices ($5k entry, $60k exit inside 1 transaction) to drain the vault.\n• **Why Traditional Scanners Failed:** Static code audits and transaction simulators gave green checkmarks because the smart contracts mathematically executed as intended.\n• **How Shield Protects You:** Shield evaluates 2-hop money trails, rapid sweep velocity anomalies, and proxy implementation changes.`;
+    return `🔍 **CASE STUDY: THE $23.75M OSTIUM HACK:**\n\nOn July 15, on-chain perpetuals exchange Ostium lost **$23.75M USDC** from its liquidity vault without a single bug in its smart contract code!\n\n• **What Happened:** An off-chain price oracle signer key (\`PriceUpKeep\`) was compromised. The attacker fed fabricated Bitcoin prices ($5k entry, $60k exit inside 1 transaction) to drain the vault.\n• **Why Traditional Scanners Failed:** Static code audits and transaction simulators gave green checkmarks because the smart contracts mathematically executed as intended.\n• **How Shield Protects You:** Shield evaluates 2-hop money trails, rapid sweep velocity anomalies (the Ostium attacker ran a 100 USDC probe before the $11.9M sweep), and proxy implementation changes.`;
   }
 
   // EIP-7702
