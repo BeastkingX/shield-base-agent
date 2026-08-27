@@ -185,6 +185,9 @@ describe("Shield scan orchestration", () => {
     const identity = receipt.evidence.find(
       (item) => item.id === "EVIDENCE_TARGET_TYPE",
     );
+    const delegateEvidence = receipt.evidence.find(
+      (item) => item.id === "EVIDENCE_7702_DELEGATE",
+    );
 
     expect(receipt.targetType).toBe("wallet");
     expect(identity).toMatchObject({
@@ -197,11 +200,60 @@ describe("Shield scan orchestration", () => {
     expect(identity?.facts?.["Delegation target"]).toBe(
       "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
     );
-    expect(getContractSourceMetadata).not.toHaveBeenCalled();
-    expect(getIndexedContractCreation).not.toHaveBeenCalled();
+    expect(delegateEvidence).toMatchObject({
+      status: "pass",
+    });
+    expect(getContractSourceMetadata).toHaveBeenCalledWith(
+      "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+    );
     expect(baseClient.getStorageAt).not.toHaveBeenCalled();
-    expect(receipt.coverage).toEqual({ completed: 8, unavailable: 0, total: 8 });
+    expect(receipt.coverage).toEqual({ completed: 9, unavailable: 0, total: 9 });
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
+  });
+
+  it("flags a delegated wallet with warning when delegate is unverified and unlisted", async () => {
+    const unverifiedDelegate = "0xE54E194A0B9C3Bd4dC587acB5398adD0e7F8Bb16" as Address;
+    const delegatedWallet = "0x2222222222222222222222222222222222222222" as Address;
+
+    vi.mocked(baseClient.getCode).mockImplementation(async ({ address }) => {
+      if (address.toLowerCase() === delegatedWallet.toLowerCase()) {
+        return `0xef0100${unverifiedDelegate.slice(2).toLowerCase()}` as Hex;
+      }
+      return "0x60006000" as Hex;
+    });
+
+    vi.mocked(getContractSourceMetadata).mockResolvedValue({
+      SourceCode: "",
+      ABI: "",
+      ContractName: "",
+      CompilerVersion: "",
+      CompilerType: "",
+      OptimizationUsed: "0",
+      Runs: "0",
+      EVMVersion: "Default",
+      LicenseType: "",
+      Proxy: "0",
+      Implementation: "",
+      SimilarMatch: "",
+      verified: false,
+    });
+
+    vi.mocked(getIndexedRecentTransactions).mockResolvedValue({
+      provider: "blockscout-pro",
+      data: [],
+      method: "account.txlist",
+    });
+
+    const receipt = await runShieldScan(delegatedWallet);
+    const delegateEvidence = receipt.evidence.find(
+      (item) => item.id === "EVIDENCE_7702_DELEGATE",
+    );
+
+    expect(delegateEvidence).toMatchObject({
+      status: "warning",
+      label: "Unverified 7702 delegate contract evaluated",
+    });
+    expect(receipt.verdict).toBe("CAUTION");
   });
 
   it("surfaces explorer-reported proxies even without an EIP-1967 slot value", async () => {

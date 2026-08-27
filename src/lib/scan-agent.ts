@@ -22,6 +22,7 @@ import {
 } from "./indexed-data";
 import { fetchApprovalsForWallet, type ApprovalsSummary } from "./approvals";
 import { analyzeClusterTaint, type ClusterAnalysis } from "./cluster-detector";
+import { getKnown7702Delegate } from "./delegate-registry";
 import { evaluateRisk, RISK_ENGINE_VERSION } from "./risk-engine";
 import type {
   EvidenceCategory,
@@ -180,6 +181,43 @@ function summarizeTransactions(
       ? new Date(Number(transactions[0].timeStamp) * 1000).toISOString()
       : null,
   };
+}
+
+async function getThreatFlags(
+  targetAddress: Address,
+): Promise<{ dangerHits: string[]; warnHits: string[]; dataSource: string } | null> {
+  try {
+    const gpUrl = `https://api.gopluslabs.io/api/v1/address_security/${targetAddress}?chain_id=8453`;
+    const gpRes = await fetch(gpUrl, { cache: "no-store", signal: AbortSignal.timeout(6_000) });
+    const gp = await gpRes.json();
+    if (gpRes.ok && gp?.code === 1 && gp?.result) {
+      const r = gp.result as Record<string, string>;
+      const dangerKeys = [
+        "phishing_activities",
+        "blacklist_doubt",
+        "stealing_attack",
+        "honeypot_related_address",
+        "fake_kyc",
+        "cybercrime",
+      ];
+      const warnKeys = [
+        "money_laundering",
+        "darkweb_transactions",
+        "sanctioned",
+        "mixer",
+        "malicious_mining_activities",
+        "gas_abuse",
+        "financial_crime",
+        "blackmail_activities",
+        "fake_token",
+        "number_of_malicious_contracts_created",
+      ];
+      const dangerHits = dangerKeys.filter((k) => r[k] === "1");
+      const warnHits = warnKeys.filter((k) => r[k] === "1");
+      return { dangerHits, warnHits, dataSource: r.data_source || "GoPlus Lab" };
+    }
+  } catch {}
+  return null;
 }
 
 export async function runShieldScan(address: Address): Promise<ScanReceipt> {
@@ -702,6 +740,99 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         }),
       );
     }
+
+    // EIP-7702 Delegate Bounded 1-Hop Evaluation
+    if (delegationAddress) {
+      try {
+        const [delegateCode, delegateSourceRes, delegateCreationRes, delegateThreat] =
+          await Promise.allSettled([
+            baseClient.getCode({ address: delegationAddress, blockNumber }),
+            getContractSourceMetadata(delegationAddress),
+            getIndexedContractCreation(delegationAddress),
+            getThreatFlags(delegationAddress),
+          ]);
+
+        const knownDelegate = getKnown7702Delegate(delegationAddress);
+        const hasCode =
+          delegateCode.status === "fulfilled" &&
+          delegateCode.value &&
+          delegateCode.value !== "0x";
+        const isVerifiedSource =
+          delegateSourceRes.status === "fulfilled" &&
+          delegateSourceRes.value &&
+          delegateSourceRes.value.verified;
+        const contractName =
+          (delegateSourceRes.status === "fulfilled" && delegateSourceRes.value?.ContractName) ||
+          knownDelegate?.name ||
+          "Unlabeled Delegate";
+        const creator =
+          delegateCreationRes.status === "fulfilled"
+            ? delegateCreationRes.value?.data?.contractCreator
+            : "Unknown";
+
+        const hasDangerThreat =
+          delegateThreat.status === "fulfilled" &&
+          delegateThreat.value &&
+          delegateThreat.value.dangerHits.length > 0;
+
+        let delegateStatus: EvidenceItem["status"] = "pass";
+        let claim = `This wallet delegates execution to verified contract ${delegationAddress} (${contractName}).`;
+
+        if (hasDangerThreat) {
+          delegateStatus = "danger";
+          claim = `CRITICAL: The delegated execution contract ${delegationAddress} is flagged for malicious threat activity (${delegateThreat.value?.dangerHits.join(", ")}).`;
+        } else if (!isVerifiedSource && !knownDelegate) {
+          delegateStatus = "warning";
+          claim = `This wallet delegates all execution to contract ${delegationAddress}. Its code — not the wallet's — runs on every transfer here. The delegate has no verified source and is not a recognized smart-account implementation; treat the wallet as carrying the risk of that contract.`;
+        }
+
+        items.push(
+          evidence(context, {
+            id: "EVIDENCE_7702_DELEGATE",
+            category: "identity",
+            label:
+              delegateStatus === "danger"
+                ? `Malicious 7702 delegate contract flagged`
+                : delegateStatus === "warning"
+                ? `Unverified 7702 delegate contract evaluated`
+                : `Verified 7702 delegate evaluated (${contractName})`,
+            status: delegateStatus,
+            claim,
+            source: "base-rpc + etherscan-v2 + goplus",
+            method: "Bounded 1-hop delegate bytecode, source verification & threat check",
+            rawValue: isVerifiedSource || Boolean(knownDelegate),
+            facts: {
+              "Delegate address": delegationAddress,
+              "Verified source": isVerifiedSource ? "Yes" : "No",
+              "Contract name": contractName,
+              "Framework / Registry": knownDelegate?.framework || "Custom / Unknown",
+              Creator: creator || "Unknown",
+              "Threat flags":
+                delegateThreat.status === "fulfilled" && delegateThreat.value?.dangerHits.length
+                  ? delegateThreat.value.dangerHits.join(", ")
+                  : "none",
+            },
+            referenceUrl: addressExplorerUrl(delegationAddress),
+            limitations: [
+              "Depth capped at 1: only the delegate itself is evaluated; code it calls internally is out of scope for this check.",
+            ],
+          }),
+        );
+      } catch (delegateError) {
+        items.push(
+          unavailableEvidence(
+            context,
+            "identity",
+            "EVIDENCE_7702_DELEGATE",
+            "7702 delegate evaluation unavailable",
+            "Shield could not inspect metadata for the delegate contract at scan time.",
+            "base-rpc + etherscan-v2",
+            "contract.getsourcecode + eth_getCode",
+            ["Explorer failure prevented delegate inspection; this is an explicit gap, not a pass."],
+          ),
+        );
+      }
+    }
   }
 
   // Money Trail & Sweep Velocity — measured on every scan
@@ -821,15 +952,9 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
   // Third-party threat intelligence (GoPlus address security, free endpoint for wallets)
   if (targetType === "wallet") {
     try {
-      const gpUrl = `https://api.gopluslabs.io/api/v1/address_security/${address}?chain_id=8453`;
-      const gpRes = await fetch(gpUrl, { cache: "no-store", signal: AbortSignal.timeout(6_000) });
-      const gp = await gpRes.json();
-      if (gpRes.ok && gp?.code === 1 && gp?.result) {
-        const r = gp.result as Record<string, string>;
-        const dangerKeys = ["phishing_activities", "blacklist_doubt", "stealing_attack", "honeypot_related_address", "fake_kyc", "cybercrime"];
-        const warnKeys = ["money_laundering", "darkweb_transactions", "sanctioned", "mixer", "malicious_mining_activities", "gas_abuse", "financial_crime", "blackmail_activities", "fake_token", "number_of_malicious_contracts_created"];
-        const dangerHits = dangerKeys.filter((k) => r[k] === "1");
-        const warnHits = warnKeys.filter((k) => r[k] === "1");
+      const threatData = await getThreatFlags(address);
+      if (threatData) {
+        const { dangerHits, warnHits, dataSource } = threatData;
         items.push(
           evidence(context, {
             id: "EVIDENCE_THREAT_INTEL",
@@ -851,7 +976,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             facts: {
               "Danger flags": dangerHits.join(", ") || "none",
               "Caution flags": warnHits.join(", ") || "none",
-              "Data source noted by provider": r.data_source || "n/a",
+              "Data source noted by provider": dataSource,
             },
             referenceUrl: `https://gopluslabs.io/`,
             limitations: [
@@ -860,7 +985,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           }),
         );
       } else {
-        throw new Error(`unexpected GoPlus response (HTTP ${gpRes.status})`);
+        throw new Error("GoPlus query returned empty");
       }
     } catch (error) {
       items.push(

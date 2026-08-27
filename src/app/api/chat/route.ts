@@ -72,7 +72,7 @@ CRITICAL INSTRUCTION: Base your answer strictly on the fact card above. Do not h
 Your goal is to provide accurate, honest, and verifiable on-chain security analysis.
 
 Output guidelines:
-1. Always format responses in clean markdown (bold **highlights**, bullet points •, and numbered steps). Do not use excessive raw asterisks.
+1. Keep answers under 220 words unless the user explicitly asks for a deep dive. Use bullets.
 2. If asked about an address, base your response strictly on the on-chain context below. Never invent balances or block numbers.
 3. If asked an educational or case study question, explain the real-world mechanics clearly.
 ${factCardPrompt}
@@ -117,15 +117,22 @@ ${
               { role: "user", content: message },
             ],
             temperature: 0.2,
-            max_tokens: 750,
+            max_tokens: 1200,
           }),
           signal: AbortSignal.timeout(10000),
         });
 
         if (res.ok) {
           const llmData = await res.json();
-          const reply = llmData.choices?.[0]?.message?.content;
+          let reply = llmData.choices?.[0]?.message?.content;
+          const finishReason = llmData.choices?.[0]?.finish_reason;
+
           if (reply) {
+            // Clean up any entity escaping
+            reply = reply.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+            if (finishReason === "length") {
+              reply += `\n\n*(Answer capped for length — say "continue" for the rest.)*`;
+            }
             return NextResponse.json({ reply });
           }
         }

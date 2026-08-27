@@ -20,7 +20,12 @@ interface ChatMessage {
  * into clean formatted HTML elements without showing raw asterisks (*).
  */
 function FormattedMessage({ text }: { text: string }) {
-  const lines = text.split("\n");
+  const unescaped = (text || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+  const lines = unescaped.split("\n");
 
   return (
     <div className="formattedMessageContent">
