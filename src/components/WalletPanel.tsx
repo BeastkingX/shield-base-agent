@@ -11,6 +11,7 @@ import {
   WalletConnectError,
   type Eip1193Provider,
 } from "@/lib/wallet";
+import ProtectedSendModal from "./ProtectedSendModal";
 
 interface WalletPanelProps {
   /** Called with the connected account whenever Shield should scan it. */
@@ -36,6 +37,7 @@ export default function WalletPanel({
   const [switching, setSwitching] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [showSendModal, setShowSendModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +189,7 @@ export default function WalletPanel({
         </button>
         {error && <p className="walletError" role="alert">{error}</p>}
         <p className="walletNote">
-          Read-only — Shield never signs or sends transactions.
+          Read-only by default — Protected Send option available after connect.
         </p>
       </div>
     );
@@ -222,6 +224,12 @@ export default function WalletPanel({
           <button
             className="primaryAction"
             type="button"
+            onClick={() => setShowSendModal(true)}
+          >
+            🛡️ Protected Send
+          </button>
+          <button
+            type="button"
             disabled={scanning}
             onClick={() => onAddress(address)}
           >
@@ -234,9 +242,16 @@ export default function WalletPanel({
       </div>
       {error && <p className="walletError" role="alert">{error}</p>}
       <p className="walletNote" role="status">
-        Shield scanned this wallet automatically. Read-only — we never sign or send transactions.
-        {!onBase && " Scans run on Base Mainnet."}
+        Connected to Base Mainnet. Use <strong>Protected Send</strong> to verify any recipient address before broadcasting.
       </p>
+
+      {/* Protected Send Modal */}
+      <ProtectedSendModal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+        senderAddress={address}
+        provider={provider}
+      />
     </div>
   );
 }
