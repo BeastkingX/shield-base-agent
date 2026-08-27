@@ -107,10 +107,10 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "The scan failed.");
       setReceipt(data);
-      window.setTimeout(
-        () => resultsRef.current?.scrollIntoView({ behavior: "smooth" }),
-        100,
-      );
+      // Auto-scroll directly to results smoothly
+      window.setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 120);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The scan failed.");
     } finally {
@@ -390,42 +390,57 @@ export default function Home() {
 
               <div className="overviewGrid" aria-label="Scan overview">
                 <article>
-                  <span>Target</span>
+                  <span>Identity</span>
                   <strong>
-                    {receipt.targetType === "contract"
-                      ? "Smart contract"
-                      : "Wallet address"}
+                    {receipt.evidence.find((e) => e.id === "EVIDENCE_TARGET_TYPE")
+                      ?.facts?.["Classification"] ||
+                      (receipt.targetType === "contract"
+                        ? "Smart contract"
+                        : "Standard EOA wallet")}
                   </strong>
-                  <small>Classified from live bytecode</small>
+                  <small>Classified from live Base bytecode</small>
                 </article>
                 <article>
-                  <span>Reference block</span>
-                  <strong>{Number(receipt.blockNumber).toLocaleString()}</strong>
+                  <span>Money Trail</span>
+                  <strong
+                    style={{
+                      color: receipt.clusterAnalysis?.isSweeperActive
+                        ? "var(--red)"
+                        : receipt.clusterAnalysis?.hasTaint
+                        ? "var(--amber)"
+                        : "var(--green)",
+                    }}
+                  >
+                    {receipt.clusterAnalysis?.isSweeperActive
+                      ? "🚨 Active Sweeper Bot"
+                      : receipt.clusterAnalysis?.hasTaint
+                      ? `⚠️ ${receipt.clusterAnalysis.clusterTaintName || "Drainer Cluster"}`
+                      : "Clean 1-Hop Funding"}
+                  </strong>
                   <small>
-                    {new Date(receipt.blockTimestamp).toLocaleString()}
+                    {receipt.clusterAnalysis?.isSweeperActive
+                      ? "Inflows drained in <8s"
+                      : "No sweeper bot or cluster taint"}
                   </small>
                 </article>
                 <article>
-                  <span>Data sources</span>
-                  <strong>Base RPC + indexed explorer</strong>
+                  <span>Token Exposure</span>
+                  <strong>
+                    {receipt.approvalsSummary?.totalCount
+                      ? `${receipt.approvalsSummary.totalCount} Active Approvals`
+                      : "0 Open Allowances (Clean)"}
+                  </strong>
                   <small>
-                    {receipt.evidence.filter(
-                      (item) =>
-                        ["etherscan-v2", "blockscout-pro"].includes(
-                          item.source
-                        ) && item.status !== "unavailable"
-                    ).length
-                      ? "Explorer evidence returned"
-                      : "Explorer evidence unavailable"}
+                    {receipt.approvalsSummary?.unlimitedCount
+                      ? `${receipt.approvalsSummary.unlimitedCount} unlimited allowances`
+                      : "No unrevoked token approvals"}
                   </small>
                 </article>
                 <article>
-                  <span>Captured</span>
-                  <strong>
-                    {new Date(receipt.scannedAt).toLocaleTimeString()}
-                  </strong>
+                  <span>Base Chain State</span>
+                  <strong>Block #{Number(receipt.blockNumber).toLocaleString()}</strong>
                   <small>
-                    {new Date(receipt.scannedAt).toLocaleDateString()}
+                    {new Date(receipt.blockTimestamp).toLocaleTimeString()} · {new Date(receipt.blockTimestamp).toLocaleDateString()}
                   </small>
                 </article>
               </div>
