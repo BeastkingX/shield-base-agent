@@ -9,6 +9,7 @@ import type {
 } from "@/lib/scan-types";
 import { shortAddress } from "@/lib/wallet";
 import WalletPanel from "@/components/WalletPanel";
+import AgentCopilot from "@/components/AgentCopilot";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
@@ -353,6 +354,8 @@ export default function Home() {
               <small>{new Date(receipt.scannedAt).toLocaleDateString()}</small>
             </article>
           </div>
+
+          <AgentCopilot receipt={receipt} />
 
           <div className="evidenceSection">
             <div className="evidenceHeading">
