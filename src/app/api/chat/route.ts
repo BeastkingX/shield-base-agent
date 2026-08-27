@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ScanReceipt } from "@/lib/scan-types";
 import { findMatchingFactCard } from "@/lib/knowledge-base";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,36 @@ const DEFAULT_GROQ_KEY =
   "";
 
 export async function POST(request: NextRequest) {
+  // Fixed-window rate armor (per-instance serverless)
+  const ip = clientIp(request);
+  if (!rateLimit(`chat:${ip}`, 20, 60_000)) {
+    return NextResponse.json(
+      { error: "Rate limit reached. Please wait a minute and try again." },
+      { status: 429 },
+    );
+  }
+
   try {
     const body: ChatRequest = await request.json();
-    const { message, receipt } = body;
+    const { message, receipt, history } = body;
 
-    if (!message) {
+    if (!message || typeof message !== "string" || !message.trim()) {
       return NextResponse.json(
-        { error: "Message text is required." },
+        { error: "A valid non-empty message is required." },
+        { status: 400 },
+      );
+    }
+
+    if (message.length > 2000) {
+      return NextResponse.json(
+        { error: "Message exceeds maximum allowed length of 2,000 characters." },
+        { status: 400 },
+      );
+    }
+
+    if (history && Array.isArray(history) && history.length > 12) {
+      return NextResponse.json(
+        { error: "Chat history exceeds maximum allowed limit of 12 turns." },
         { status: 400 },
       );
     }
@@ -41,7 +65,7 @@ export async function POST(request: NextRequest) {
         const factCardPrompt = matchedFactCard
           ? `\nVERIFIED FACT CARD FOR THIS TOPIC (${matchedFactCard.topic}):
 ${matchedFactCard.facts.map((f) => `• ${f}`).join("\n")}
-CRITICAL INSTRUCTION: Base your answer strictly on the fact card above. Do not hallucinate or invent mechanics (e.g. do not claim oracle addresses were changed if the attack was an off-chain signer key compromise).\n`
+CRITICAL INSTRUCTION: Base your answer strictly on the fact card above. Do not hallucinate or invent mechanics.\n`
           : "";
 
         const systemPrompt = `You are Shield AI Guardian, an elite Web3 and Base Mainnet security detective. 
@@ -86,7 +110,7 @@ ${
             model,
             messages: [
               { role: "system", content: systemPrompt },
-              ...(body.history || []).map((h) => ({
+              ...(history || []).map((h) => ({
                 role: h.role === "agent" ? "assistant" : "user",
                 content: h.text,
               })),

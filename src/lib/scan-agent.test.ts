@@ -200,7 +200,7 @@ describe("Shield scan orchestration", () => {
     expect(getContractSourceMetadata).not.toHaveBeenCalled();
     expect(getIndexedContractCreation).not.toHaveBeenCalled();
     expect(baseClient.getStorageAt).not.toHaveBeenCalled();
-    expect(receipt.coverage).toEqual({ completed: 7, unavailable: 0, total: 7 });
+    expect(receipt.coverage).toEqual({ completed: 8, unavailable: 0, total: 8 });
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });
 
@@ -257,5 +257,46 @@ describe("Shield scan orchestration", () => {
       "0x2222222222222222222222222222222222222222",
     );
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
+  });
+
+  it("surfaces third-party threat intelligence from GoPlus on wallet targets", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+      const urlStr = String(url);
+      if (urlStr.includes("gopluslabs.io")) {
+        return new Response(
+          JSON.stringify({
+            code: 1,
+            message: "ok",
+            result: {
+              phishing_activities: "1",
+              stealing_attack: "0",
+              data_source: "GoPlus Lab",
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ status: "1", message: "OK", result: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.mocked(baseClient.getCode).mockResolvedValue("0x" as Hex);
+    vi.mocked(getIndexedRecentTransactions).mockResolvedValue({
+      provider: "blockscout-pro",
+      data: [],
+      method: "account.txlist",
+    });
+
+    const receipt = await runShieldScan(ADDRESS);
+    const threatIntel = receipt.evidence.find(
+      (item) => item.id === "EVIDENCE_THREAT_INTEL",
+    );
+
+    expect(threatIntel).toMatchObject({
+      status: "danger",
+      source: "goplus-address-security",
+    });
+    expect(threatIntel?.facts?.["Danger flags"]).toContain("phishing_activities");
+    expect(receipt.verdict).toBe("HIGH OBSERVED RISK");
   });
 });

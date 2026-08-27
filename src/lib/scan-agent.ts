@@ -818,6 +818,66 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     );
   }
 
+  // Third-party threat intelligence (GoPlus address security, free endpoint for wallets)
+  if (targetType === "wallet") {
+    try {
+      const gpUrl = `https://api.gopluslabs.io/api/v1/address_security/${address}?chain_id=8453`;
+      const gpRes = await fetch(gpUrl, { cache: "no-store", signal: AbortSignal.timeout(6_000) });
+      const gp = await gpRes.json();
+      if (gpRes.ok && gp?.code === 1 && gp?.result) {
+        const r = gp.result as Record<string, string>;
+        const dangerKeys = ["phishing_activities", "blacklist_doubt", "stealing_attack", "honeypot_related_address", "fake_kyc", "cybercrime"];
+        const warnKeys = ["money_laundering", "darkweb_transactions", "sanctioned", "mixer", "malicious_mining_activities", "gas_abuse", "financial_crime", "blackmail_activities", "fake_token", "number_of_malicious_contracts_created"];
+        const dangerHits = dangerKeys.filter((k) => r[k] === "1");
+        const warnHits = warnKeys.filter((k) => r[k] === "1");
+        items.push(
+          evidence(context, {
+            id: "EVIDENCE_THREAT_INTEL",
+            category: "history",
+            label: dangerHits.length
+              ? `Threat-intel match: ${dangerHits.join(", ")}`
+              : warnHits.length
+                ? `Threat-intel caution flags: ${warnHits.join(", ")}`
+                : "No third-party threat-intel flags",
+            status: dangerHits.length ? "danger" : warnHits.length ? "warning" : "pass",
+            claim: dangerHits.length
+              ? `GoPlus address intelligence lists this address for: ${dangerHits.join(", ")}.`
+              : warnHits.length
+                ? `GoPlus address intelligence flags caution categories: ${warnHits.join(", ")}.`
+                : "GoPlus address intelligence returned no malicious flags for this address.",
+            source: "goplus-address-security",
+            method: "GET api.gopluslabs.io/api/v1/address_security (chain 8453)",
+            rawValue: dangerHits.length + warnHits.length,
+            facts: {
+              "Danger flags": dangerHits.join(", ") || "none",
+              "Caution flags": warnHits.join(", ") || "none",
+              "Data source noted by provider": r.data_source || "n/a",
+            },
+            referenceUrl: `https://gopluslabs.io/`,
+            limitations: [
+              "Third-party threat lists can lag fresh attackers and may contain stale or disputed entries; a flag is a strong signal, not proof, and a clean result is not a guarantee.",
+            ],
+          }),
+        );
+      } else {
+        throw new Error(`unexpected GoPlus response (HTTP ${gpRes.status})`);
+      }
+    } catch (error) {
+      items.push(
+        unavailableEvidence(
+          context,
+          "history",
+          "EVIDENCE_THREAT_INTEL",
+          "Threat-intel check unavailable",
+          "The third-party threat-intel provider could not be queried at scan time; this check is an explicit gap, not a pass.",
+          "goplus-address-security",
+          "GET api.gopluslabs.io/api/v1/address_security (chain 8453)",
+          ["No threat-intel data was available; absence of evidence was not treated as evidence."],
+        ),
+      );
+    }
+  }
+
   const risk = evaluateRisk(targetType, items);
   const completed = items.filter((item) => item.status !== "unavailable").length;
   const unavailable = items.length - completed;

@@ -4,10 +4,19 @@ import {
   runShieldScan,
   ScanInputError,
 } from "@/lib/scan-agent";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const ip = clientIp(request);
+  if (!rateLimit(`scan:${ip}`, 10, 60_000)) {
+    return NextResponse.json(
+      { error: "Rate limit reached. Please wait a minute and try again." },
+      { status: 429 },
+    );
+  }
+
   try {
     const body = await request.json();
     const address = parseScanInput(body);

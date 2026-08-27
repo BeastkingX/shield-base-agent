@@ -1,0 +1,28 @@
+name: verdicts-log
+on:
+  schedule:
+    - cron: "13 * * * *"   # hourly at :13, deliberately off the top of the hour
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx tsx scripts/log-verdicts.ts
+        env:
+          BLOCKSCOUT_API_KEY: ${{ secrets.BLOCKSCOUT_API_KEY }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      - run: |
+          git config user.name "shield-verdicts-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add verdicts/
+          git commit -m "verdicts: $(date -u +%Y-%m-%dT%H:%MZ)" || echo "no changes"
+          git push
+      # uptime guard: ping healthchecks.io AFTER success; silence = alert email
+      - run: curl -fsS --retry 3 https://hc-ping.com/${{ secrets.HC_PING_UUID }} || true
