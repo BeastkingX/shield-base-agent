@@ -183,7 +183,6 @@ export default function Home() {
             🚩 Report Scam
           </button>
           <a href="#method">Method</a>
-          <a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub</a>
           <div className="networkPill">
             <span className={`networkDot ${health?.ok ? "online" : ""}`} />
             {health === null
@@ -642,7 +641,6 @@ export default function Home() {
         </div>
         <p>Open evidence for safer decisions on Base.</p>
         <div>
-          <a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a>
           <span>v0.3.0</span>
         </div>
       </footer>
