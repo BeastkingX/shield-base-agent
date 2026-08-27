@@ -1264,17 +1264,37 @@ a { color: inherit; }
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .preFlightBadge {
   font-weight: 850;
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
-.preFlightCoverage {
-  font-size: 10.5px;
+.preFlightCoverageLarge {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  background: var(--blue-soft);
+  border: 1.5px solid rgba(0, 82, 255, 0.25);
+  padding: 4px 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 82, 255, 0.08);
+}
+.coverageLargeNumber {
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--blue);
+  letter-spacing: -0.04em;
   font-family: ui-monospace, monospace;
-  font-weight: 700;
-  opacity: 0.85;
+}
+.coverageSmallLabel {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--blue-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 .preFlightSummary {
   margin: 0;

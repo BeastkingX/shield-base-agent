@@ -420,9 +420,18 @@ export default function ProtectedSendModal({
                     ? "🛑 HIGH RISK BLOCKED"
                     : "✅ RECIPIENT VERIFIED"}
                 </span>
-                <span className="preFlightCoverage">
-                  {recipientScan.coverage.completed}/{recipientScan.coverage.total} checks completed (100%)
-                </span>
+                <div className="preFlightCoverageLarge">
+                  <span className="coverageLargeNumber">
+                    {Math.round(
+                      (recipientScan.coverage.completed /
+                        (recipientScan.coverage.total || 1)) *
+                        100
+                    )}%
+                  </span>
+                  <span className="coverageSmallLabel">
+                    {recipientScan.coverage.completed}/{recipientScan.coverage.total} checks verified
+                  </span>
+                </div>
               </div>
               <p className="preFlightSummary">{recipientScan.summary}</p>
 
