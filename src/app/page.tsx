@@ -14,6 +14,7 @@ import WalletHealthCard from "@/components/WalletHealthCard";
 import ProtectedSendModal from "@/components/ProtectedSendModal";
 import ReportWalletModal from "@/components/ReportWalletModal";
 import ShieldLogo from "@/components/ShieldLogo";
+import AiEducationCarousel from "@/components/AiEducationCarousel";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
@@ -72,24 +73,8 @@ export default function Home() {
   const [showProtectedSend, setShowProtectedSend] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportTargetAddress, setReportTargetAddress] = useState("");
+  const [selectedQuestion, setSelectedQuestion] = useState("");
   const resultsRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    fetch("/api/health", { cache: "no-store" })
-      .then((response) => response.json())
-      .then(setHealth)
-      .catch(() => setHealth({ ok: false }));
-  }, []);
-
-  useEffect(() => {
-    if (!loading) return;
-    const timers = [
-      window.setTimeout(() => setScanStage(1), 700),
-      window.setTimeout(() => setScanStage(2), 1800),
-      window.setTimeout(() => setScanStage(3), 3400),
-    ];
-    return () => timers.forEach(window.clearTimeout);
-  }, [loading]);
 
   const filteredEvidence = useMemo(() => {
     if (!receipt || filter === "all") return receipt?.evidence || [];
@@ -121,6 +106,19 @@ export default function Home() {
       setLoading(false);
     }
   }, []);
+
+  const handleSelectEducationQuestion = useCallback(
+    async (q: string) => {
+      setSelectedQuestion(q);
+      if (!receipt) {
+        // Run scan on Vitalik's address as an active live baseline
+        await runScan("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+      } else {
+        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    },
+    [receipt, runScan],
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -292,6 +290,8 @@ export default function Home() {
             </div>
           )}
         </form>
+
+        <AiEducationCarousel onSelectQuestion={handleSelectEducationQuestion} />
 
         {!receipt && (
           <div className="trustRow" aria-label="Shield safety principles">
@@ -469,7 +469,7 @@ export default function Home() {
                 </article>
               </div>
 
-              <AgentCopilot receipt={receipt} />
+              <AgentCopilot receipt={receipt} initialQuestion={selectedQuestion} />
 
               <div className="evidenceSection">
                 <div className="evidenceHeading">

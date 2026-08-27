@@ -1775,6 +1775,115 @@ a { color: inherit; }
   transform: scale(0.96);
 }
 
+/* Interactive AI Education Carousel */
+.educationCarouselSection {
+  margin: 36px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.carouselHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+.carouselTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sparkleIcon {
+  font-size: 15px;
+}
+.carouselHeading {
+  font-size: 12.5px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+.carouselSubTag {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+.carouselTrackWrapper {
+  overflow: hidden;
+  position: relative;
+  padding: 6px 0;
+  mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+}
+.carouselTrack {
+  display: flex;
+  gap: 14px;
+  width: max-content;
+  animation: marqueeScroll 38s linear infinite;
+}
+.carouselTrack:hover {
+  animation-play-state: paused;
+}
+@keyframes marqueeScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.carouselCardBtn {
+  width: 290px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1.5px solid var(--line);
+  box-shadow: 0 4px 16px rgba(0, 82, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  flex-shrink: 0;
+}
+.carouselCardBtn:hover {
+  transform: translateY(-3px);
+  border-color: var(--blue);
+  box-shadow: 0 12px 30px rgba(0, 82, 255, 0.12);
+  background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+}
+.cardTopLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.itemIcon {
+  font-size: 16px;
+}
+.itemTag {
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+  background: #f8fafc;
+}
+.askArrow {
+  font-size: 11px;
+  font-weight: 750;
+  color: var(--blue);
+  margin-left: auto;
+}
+.cardQuestion {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
 /* AI Agent Copilot Component */
 .agentCopilot {
   margin-top: 24px;

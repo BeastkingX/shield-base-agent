@@ -5,6 +5,7 @@ import type { ScanReceipt } from "@/lib/scan-types";
 
 interface AgentCopilotProps {
   receipt: ScanReceipt;
+  initialQuestion?: string;
 }
 
 interface ChatMessage {
@@ -83,7 +84,7 @@ function FormattedMessage({ text }: { text: string }) {
   );
 }
 
-export default function AgentCopilot({ receipt }: AgentCopilotProps) {
+export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotProps) {
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,6 +95,13 @@ export default function AgentCopilot({ receipt }: AgentCopilotProps) {
   const isEip7702 = receipt.evidence.some((e) => e.id === "EVIDENCE_TARGET_TYPE" && e.label.includes("EIP-7702"));
   const approvalsCount = receipt.approvalsSummary?.totalCount || 0;
   const unlimitedCount = receipt.approvalsSummary?.unlimitedCount || 0;
+
+  // Auto-trigger question from carousel
+  useEffect(() => {
+    if (initialQuestion && initialQuestion.trim()) {
+      handleAsk(initialQuestion.trim());
+    }
+  }, [initialQuestion]);
 
   // Default AI Detective Executive Summary
   const defaultSummary = (() => {
