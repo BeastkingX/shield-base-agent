@@ -26,6 +26,17 @@ vi.mock("./indexed-data", () => ({
   getIndexedRecentTransactions: vi.fn(),
 }));
 
+vi.mock("./approvals", () => ({
+  fetchApprovalsForWallet: vi.fn().mockResolvedValue({
+    approvals: [],
+    totalCount: 0,
+    unlimitedCount: 0,
+    highRiskCount: 0,
+    uniqueTokensCount: 0,
+    uniqueSpendersCount: 0,
+  }),
+}));
+
 import { baseClient } from "./base-client";
 import {
   ExplorerUnavailableError,
