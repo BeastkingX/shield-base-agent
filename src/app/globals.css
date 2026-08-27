@@ -964,6 +964,110 @@ footer a { color: var(--blue); text-decoration: none; font-weight: 800; }
   border-color: #f97316 !important;
 }
 
+/* Interactive Modal Micro-Interactions */
+.modalBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.basePill {
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--blue-soft);
+  color: var(--blue-strong);
+  border: 1px solid rgba(21, 87, 255, 0.25);
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-family: ui-monospace, monospace;
+}
+.interactivePercentageRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.pctButtonGroup {
+  display: flex;
+  gap: 4px;
+}
+.pctBtn {
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+.pctBtn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+.pctBtn:active {
+  transform: scale(0.95);
+}
+.pctBtnActive {
+  background: var(--blue) !important;
+  color: #ffffff !important;
+  border-color: var(--blue) !important;
+  box-shadow: 0 2px 8px rgba(21, 87, 255, 0.25);
+}
+.priceEquivalentTag {
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  font-weight: 800;
+  color: #10b981;
+  background: #f0fdf4;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+}
+.inputActionHelper {
+  display: flex;
+  gap: 4px;
+}
+.pasteBtn, .clearBtn {
+  border: none;
+  background: transparent;
+  color: var(--blue);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+.pasteBtn:hover, .clearBtn:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+.presetBtn {
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.presetBtn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #ffffff;
+}
+.presetBtn:active {
+  transform: scale(0.96);
+}
+
 .sendModalBackdrop {
   position: fixed;
   inset: 0;

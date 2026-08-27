@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { parseEther, isAddress, getAddress, type Address, type Hex } from "viem";
-import type { Eip1193Provider } from "@/lib/wallet";
+import { switchToBase, isBaseChain, type Eip1193Provider } from "@/lib/wallet";
 import type { ScanReceipt, EvidenceItem } from "@/lib/scan-types";
 import { baseClient } from "@/lib/base-client";
 import TokenSelector, { SUPPORTED_BASE_TOKENS, type TokenItem } from "./TokenSelector";
@@ -33,8 +33,9 @@ export default function ProtectedSendModal({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [overrideWarning, setOverrideWarning] = useState(false);
+  const [activePercentage, setActivePercentage] = useState<number | null>(null);
 
-  // Fetch token price in USD
+  // Fetch live token price in USD
   useEffect(() => {
     let tokenParam = selectedToken.symbol;
     let addrParam = selectedToken.address || "";
@@ -49,7 +50,7 @@ export default function ProtectedSendModal({
       .catch(() => {});
   }, [selectedToken, customTokenAddress]);
 
-  // Read User Balance for selected asset
+  // Read User Balance for selected asset on Base Mainnet
   useEffect(() => {
     if (!senderAddress || !isAddress(senderAddress)) return;
 
@@ -75,7 +76,7 @@ export default function ProtectedSendModal({
             const cleanOwner = owner.toLowerCase().replace(/^0x/, "").padStart(64, "0");
             const res = await baseClient.call({
               to: tokenAddr,
-              data: `0x70a08231${cleanOwner}` as Hex, // balanceOf(owner)
+              data: `0x70a08231${cleanOwner}` as Hex,
             });
             if (res.data) {
               const rawBal = BigInt(res.data);
@@ -84,14 +85,14 @@ export default function ProtectedSendModal({
           }
         }
       } catch (err) {
-        console.warn("Error reading balance:", err);
+        console.warn("Error reading balance on Base:", err);
       }
     };
 
     fetchBalance();
   }, [senderAddress, selectedToken, customTokenAddress]);
 
-  // Auto-scan recipient address
+  // Auto-scan recipient address on Base
   useEffect(() => {
     const clean = recipient.trim();
     if (!clean || !isAddress(clean)) {
@@ -119,7 +120,7 @@ export default function ProtectedSendModal({
       } finally {
         setScanningRecipient(false);
       }
-    }, 150);
+    }, 120);
 
     return () => clearTimeout(timer);
   }, [recipient]);
@@ -138,10 +139,33 @@ export default function ProtectedSendModal({
   const dollarEquivalent = (amountNum * tokenPrice).toFixed(2);
   const userBalanceUsd = (userBalance * tokenPrice).toFixed(2);
 
-  const handleMaxClick = () => {
-    if (userBalance > 0) {
-      const maxAmount = selectedToken.symbol === "ETH" ? Math.max(0, userBalance - 0.0005) : userBalance;
-      setAmount(maxAmount.toString());
+  const handlePercentageSelect = (pct: number) => {
+    setActivePercentage(pct);
+    if (userBalance <= 0) {
+      setAmount("0");
+      return;
+    }
+
+    if (pct === 100) {
+      const maxVal =
+        selectedToken.symbol === "ETH"
+          ? Math.max(0, userBalance - 0.0003) // reserve dust for gas on Base
+          : userBalance;
+      setAmount(maxVal.toString());
+    } else {
+      const calculated = (userBalance * (pct / 100)).toFixed(
+        selectedToken.symbol === "USDC" ? 2 : 5,
+      );
+      setAmount(calculated);
+    }
+  };
+
+  const handlePasteRecipient = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setRecipient(text.trim());
+    } catch {
+      // Fallback
     }
   };
 
@@ -167,6 +191,15 @@ export default function ProtectedSendModal({
     setTxHash(null);
 
     try {
+      // STRICT BASE MAINNET NETWORK ENFORCEMENT
+      const currentChainHex = await provider.request({ method: "eth_chainId" });
+      const currentChainId = Number.parseInt(String(currentChainHex), 16);
+
+      if (!isBaseChain(currentChainId)) {
+        // Automatically switch wallet to Base Mainnet
+        await switchToBase(provider);
+      }
+
       const from = getAddress(senderAddress);
       const to = getAddress(recipient);
 
@@ -228,12 +261,16 @@ export default function ProtectedSendModal({
   return (
     <div className="sendModalBackdrop" onClick={onClose}>
       <div className="sendModalCard" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div className="sendModalHeader">
           <div className="sendModalTitle">
             <span className="sendShieldIcon">🛡️</span>
             <div>
-              <h3>Protected Send on Base</h3>
-              <p>Shield scans recipient and verifies balances before broadcasting</p>
+              <div className="modalBadgeRow">
+                <h3>Protected Send</h3>
+                <span className="basePill">Base Mainnet (8453)</span>
+              </div>
+              <p>Shield scans recipient and enforces Base network before broadcasting</p>
             </div>
           </div>
           <button type="button" className="closeBtn" onClick={onClose} aria-label="Close modal">
@@ -242,16 +279,13 @@ export default function ProtectedSendModal({
         </div>
 
         <form onSubmit={handleSend} className="sendForm">
-          {/* Asset & Amount Selector with live USD equivalent and Balance */}
+          {/* Asset & Amount Selector */}
           <div className="formGroup">
             <div className="labelRow">
               <label>Asset & Amount</label>
               <div className="balanceRow">
-                <span>Available: {userBalance.toFixed(selectedToken.symbol === "USDC" ? 2 : 5)} {selectedToken.symbol}</span>
-                <span className="balanceUsdTag">(${userBalanceUsd} USD)</span>
-                <button type="button" className="maxBtn" onClick={handleMaxClick}>
-                  MAX
-                </button>
+                <span>Available: <strong>{userBalance.toFixed(selectedToken.symbol === "USDC" ? 2 : 5)} {selectedToken.symbol}</strong></span>
+                <span className="balanceUsdTag">(${userBalanceUsd})</span>
               </div>
             </div>
 
@@ -261,25 +295,45 @@ export default function ProtectedSendModal({
                 step="any"
                 min="0"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setActivePercentage(null);
+                }}
                 placeholder="0.0"
                 required
               />
               <TokenSelector
                 selectedToken={selectedToken}
-                onSelectToken={(t) => setSelectedToken(t)}
+                onSelectToken={(t) => {
+                  setSelectedToken(t);
+                  setActivePercentage(null);
+                }}
                 customAddress={customTokenAddress}
                 onCustomAddressChange={setCustomTokenAddress}
               />
             </div>
 
-            {/* USD Price Equivalent Indicator */}
-            {amountNum > 0 && (
-              <div className="priceEquivalentRow">
-                <span className="usdEquivalentText">≈ ${dollarEquivalent} USD</span>
-                <span className="unitPriceText">(1 {selectedToken.symbol} = ${tokenPrice.toLocaleString()} USD)</span>
+            {/* Interactive Percentage Quick-Buttons (25%, 50%, 75%, MAX) */}
+            <div className="interactivePercentageRow">
+              <div className="pctButtonGroup">
+                {[25, 50, 75, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    className={`pctBtn ${activePercentage === pct ? "pctBtnActive" : ""}`}
+                    onClick={() => handlePercentageSelect(pct)}
+                  >
+                    {pct === 100 ? "MAX" : `${pct}%`}
+                  </button>
+                ))}
               </div>
-            )}
+
+              {amountNum > 0 && (
+                <div className="priceEquivalentTag">
+                  <span>≈ ${dollarEquivalent} USD</span>
+                </div>
+              )}
+            </div>
 
             {/* Insufficient Balance Alert */}
             {isInsufficientBalance && (
@@ -297,7 +351,7 @@ export default function ProtectedSendModal({
                 type="text"
                 value={customTokenAddress}
                 onChange={(e) => setCustomTokenAddress(e.target.value)}
-                placeholder="Paste token contract (0x...)"
+                placeholder="Paste Base token contract (0x...)"
                 required
               />
             </div>
@@ -306,12 +360,18 @@ export default function ProtectedSendModal({
           {/* Recipient Address */}
           <div className="formGroup">
             <div className="labelRow">
-              <label>Recipient Address (Base Mainnet)</label>
-              {scanningRecipient && (
-                <span className="preScanningText">
-                  <span className="miniSpinner" /> Verifying on-chain…
-                </span>
-              )}
+              <label>Recipient Address (Base)</label>
+              <div className="inputActionHelper">
+                {recipient ? (
+                  <button type="button" className="clearBtn" onClick={() => setRecipient("")}>
+                    Clear ✕
+                  </button>
+                ) : (
+                  <button type="button" className="pasteBtn" onClick={handlePasteRecipient}>
+                    📋 Paste
+                  </button>
+                )}
+              </div>
             </div>
             <input
               type="text"
@@ -328,13 +388,14 @@ export default function ProtectedSendModal({
             <span>Quick test:</span>
             <button
               type="button"
+              className="presetBtn"
               onClick={() => setRecipient("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")}
             >
               vitalik.eth (Safe)
             </button>
             <button
               type="button"
-              className="dangerPreset"
+              className="presetBtn dangerPreset"
               onClick={() => setRecipient("0x7777777777777777777777777777777777777bad")}
             >
               Sweeper Trap (Risk)
@@ -475,7 +536,7 @@ export default function ProtectedSendModal({
               ) : isBlocked ? (
                 overrideWarning ? "Override & Send" : "Blocked by Shield"
               ) : (
-                "Protected Send"
+                "Protected Send on Base"
               )}
             </button>
           </div>
