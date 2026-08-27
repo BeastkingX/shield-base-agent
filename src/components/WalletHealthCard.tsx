@@ -31,26 +31,56 @@ export default function WalletHealthCard({
   const isSweeper = receipt.clusterAnalysis?.isSweeperActive;
   const isTainted = receipt.clusterAnalysis?.hasTaint;
   const approvalsCount = receipt.approvalsSummary?.totalCount || 0;
+  const unlimitedCount = receipt.approvalsSummary?.unlimitedCount || 0;
 
-  // Derive native ETH balance from evidence
+  // Derive native ETH balance
   const balanceEvidence = receipt.evidence.find((e) => e.id === "EVIDENCE_NATIVE_BALANCE");
-  const rawBalanceEthStr = balanceEvidence?.facts?.["Native balance"] as string || "0 ETH";
+  const rawBalanceEthStr = (balanceEvidence?.facts?.["Native balance"] as string) || "0 ETH";
   const balanceEthNum = parseFloat(rawBalanceEthStr.replace(" ETH", "")) || 0;
   const balanceUsd = (balanceEthNum * ethPrice).toFixed(2);
 
-  // Compute Reputation Score
-  const reputationScore = isSweeper
-    ? 0
-    : isTainted
-    ? 15
-    : Math.min(100, Math.max(80, 85 + (receipt.targetType === "wallet" ? 10 : 5)));
+  // Derive txCount
+  const txCountItem = receipt.evidence.find((e) => e.id === "EVIDENCE_TRANSACTION_COUNT");
+  const txCount = (txCountItem?.facts?.["Transaction count"] as number) || 0;
+
+  // 1,000-Point Multi-Vector Reputation Formula
+  const reputationScore = (() => {
+    if (isSweeper) return 0;
+    if (isTainted) return 120;
+
+    let score = 500; // Base baseline
+
+    // 1. Transaction History & Activity (Max +250)
+    if (txCount >= 400) score += 250;
+    else if (txCount >= 100) score += 200;
+    else if (txCount >= 20) score += 150;
+    else if (txCount > 0) score += 80;
+
+    // 2. Money-Trail & Seed Funder Health (Max +150)
+    if (!isTainted && !isSweeper) score += 150;
+
+    // 3. Approval Exposure Hygiene (Max +100)
+    if (approvalsCount === 0) {
+      score += 100; // Clean self-custody
+    } else if (unlimitedCount === 0) {
+      score += 80;
+    } else if (unlimitedCount <= 5) {
+      score += 50;
+    }
+
+    return Math.min(1000, Math.max(0, score));
+  })();
 
   const reputationGrade =
-    reputationScore >= 90
-      ? "A+ · Clean & Trusted EOA"
-      : reputationScore >= 75
-      ? "B · Standard Activity"
-      : "F · High Risk Taint";
+    reputationScore >= 900
+      ? "Tier 1 · Prime Trust (A+)"
+      : reputationScore >= 750
+      ? "Tier 2 · Verified & Active (A)"
+      : reputationScore >= 500
+      ? "Tier 3 · Standard / Moderate"
+      : reputationScore >= 250
+      ? "Tier 4 · Caution"
+      : "Tier 5 · Critical Hazard / Blacklisted";
 
   return (
     <div className="walletHealthCard">
@@ -67,11 +97,11 @@ export default function WalletHealthCard({
           </div>
         </div>
 
-        {/* Reputation Score Meter */}
+        {/* 1,000-Point Institutional Reputation Score Meter */}
         <div className="reputationScoreBox">
           <div className="scoreNumber">
             <span className="scoreValue">{reputationScore}</span>
-            <span className="scoreMax">/100</span>
+            <span className="scoreMax">/ 1,000</span>
           </div>
           <div className="scoreMeta">
             <strong>Reputation Score</strong>
@@ -86,7 +116,7 @@ export default function WalletHealthCard({
         <div className={`metricCol ${isSweeper ? "metricDanger" : "metricSafe"}`}>
           <span className="metricIcon">{isSweeper ? "🚨" : "✅"}</span>
           <div>
-            <span className="metricTitle">Wallet Security Status</span>
+            <span className="metricTitle">Security & Compromise Health</span>
             <strong>
               {isSweeper
                 ? "Active Sweeper Bot Detected"
@@ -128,7 +158,7 @@ export default function WalletHealthCard({
             <small>
               {approvalsCount === 0
                 ? "Zero exposure to external contracts"
-                : "Audited across canonical protocols"}
+                : `${unlimitedCount} unlimited permissions audited`}
             </small>
           </div>
         </div>
@@ -139,7 +169,7 @@ export default function WalletHealthCard({
         <div className="healthTip">
           <span>💡</span>
           <p>
-            You can now send tokens safely using <strong>Protected Send</strong>. Shield will scan any recipient address before broadcasting.
+            You can send tokens safely using <strong>Protected Send</strong>. Shield scans any recipient address and verifies network before broadcasting.
           </p>
         </div>
 
