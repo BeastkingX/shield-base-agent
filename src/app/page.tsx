@@ -12,6 +12,8 @@ import WalletPanel from "@/components/WalletPanel";
 import AgentCopilot from "@/components/AgentCopilot";
 import WalletHealthCard from "@/components/WalletHealthCard";
 import ProtectedSendModal from "@/components/ProtectedSendModal";
+import ReportWalletModal from "@/components/ReportWalletModal";
+import ShieldLogo from "@/components/ShieldLogo";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
@@ -68,6 +70,8 @@ export default function Home() {
   const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
   const [showSelfTechnicalEvidence, setShowSelfTechnicalEvidence] = useState(false);
   const [showProtectedSend, setShowProtectedSend] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTargetAddress, setReportTargetAddress] = useState("");
   const resultsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -166,10 +170,20 @@ export default function Home() {
     <main>
       <nav className="nav shell" aria-label="Primary navigation">
         <a className="brand" href="#top" aria-label="Shield home">
-          <span className="brandMark" aria-hidden="true">S</span>
+          <ShieldLogo size={34} />
           <span>SHIELD</span>
         </a>
         <div className="navRight">
+          <button
+            type="button"
+            className="reportHeaderActionBtn"
+            onClick={() => {
+              setReportTargetAddress(address || receipt?.address || "");
+              setShowReportModal(true);
+            }}
+          >
+            🚩 Report Scam
+          </button>
           <a href="#method">Method</a>
           <a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub</a>
           <div className="networkPill">
@@ -325,6 +339,16 @@ export default function Home() {
                   <p>Receipt {receipt.receiptId}</p>
                 </div>
                 <div className="resultActions">
+                  <button
+                    type="button"
+                    style={{ color: "#e11d48" }}
+                    onClick={() => {
+                      setReportTargetAddress(receipt.address);
+                      setShowReportModal(true);
+                    }}
+                  >
+                    🚩 Report Address
+                  </button>
                   <a
                     href={`https://basescan.org/address/${receipt.address}`}
                     target="_blank"
@@ -609,9 +633,15 @@ export default function Home() {
       )}
 
       <footer className="shell">
-        <div className="brand"><span className="brandMark">S</span><span>SHIELD</span></div>
+        <div className="brand">
+          <ShieldLogo size={28} />
+          <span>SHIELD</span>
+        </div>
         <p>Open evidence for safer decisions on Base.</p>
-        <div><a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a><span>v0.3.0</span></div>
+        <div>
+          <a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a>
+          <span>v0.3.0</span>
+        </div>
       </footer>
 
       {showProtectedSend && (
@@ -620,6 +650,15 @@ export default function Home() {
           onClose={() => setShowProtectedSend(false)}
           senderAddress={connectedAccount || ""}
           provider={getInjectedWallet()?.provider ?? null}
+        />
+      )}
+
+      {showReportModal && (
+        <ReportWalletModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          initialAddress={reportTargetAddress}
+          reporterAddress={connectedAccount}
         />
       )}
     </main>
