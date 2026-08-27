@@ -75,6 +75,7 @@ export default function Home() {
   const [reportTargetAddress, setReportTargetAddress] = useState("");
   const [selectedQuestion, setSelectedQuestion] = useState("");
   const resultsRef = useRef<HTMLElement>(null);
+  const chatSectionRef = useRef<HTMLElement | null>(null);
 
   const filteredEvidence = useMemo(() => {
     if (!receipt || filter === "all") return receipt?.evidence || [];
@@ -107,18 +108,10 @@ export default function Home() {
     }
   }, []);
 
-  const handleSelectEducationQuestion = useCallback(
-    async (q: string) => {
-      setSelectedQuestion(q);
-      if (!receipt) {
-        // Run scan on Vitalik's address as an active live baseline
-        await runScan("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
-      } else {
-        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    },
-    [receipt, runScan],
-  );
+  const handleSelectEducationQuestion = useCallback((q: string) => {
+    setSelectedQuestion(q);
+    chatSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -291,6 +284,10 @@ export default function Home() {
         </form>
 
         <AiEducationCarousel onSelectQuestion={handleSelectEducationQuestion} />
+
+        <section ref={chatSectionRef} id="ask-shield" className="chatSection">
+          <AgentCopilot receipt={receipt ?? undefined} initialQuestion={selectedQuestion} />
+        </section>
 
         {!receipt && (
           <div className="trustRow" aria-label="Shield safety principles">
@@ -467,8 +464,6 @@ export default function Home() {
                   </small>
                 </article>
               </div>
-
-              <AgentCopilot receipt={receipt} initialQuestion={selectedQuestion} />
 
               <div className="evidenceSection">
                 <div className="evidenceHeading">

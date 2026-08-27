@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
 
 interface AgentCopilotProps {
-  receipt: ScanReceipt;
+  receipt?: ScanReceipt;
   initialQuestion?: string;
 }
 
@@ -91,14 +91,17 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const isSweeper = receipt.clusterAnalysis?.isSweeperActive;
-  const isTainted = receipt.clusterAnalysis?.hasTaint;
-  const isEip7702 = receipt.evidence.some((e) => e.id === "EVIDENCE_TARGET_TYPE" && e.label.includes("EIP-7702"));
-  const approvalsCount = receipt.approvalsSummary?.totalCount || 0;
-  const unlimitedCount = receipt.approvalsSummary?.unlimitedCount || 0;
+  const isSweeper = receipt?.clusterAnalysis?.isSweeperActive;
+  const isTainted = receipt?.clusterAnalysis?.hasTaint;
+  const isEip7702 = receipt?.evidence.some((e) => e.id === "EVIDENCE_TARGET_TYPE" && e.label.includes("EIP-7702"));
+  const approvalsCount = receipt?.approvalsSummary?.totalCount || 0;
+  const unlimitedCount = receipt?.approvalsSummary?.unlimitedCount || 0;
 
-  // Default AI Detective Executive Summary
+  // Default AI Detective Summary (Guarded when no receipt is present)
   const defaultSummary = (() => {
+    if (!receipt) {
+      return `👋 **Shield AI Security Detective Online:** I analyze on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Click any question above or ask me anything to begin!`;
+    }
     if (isSweeper) {
       return `🚨 **CRITICAL HAZARD DETECTED:** This address is under an active **Sweeper Bot compromise**. Any ETH or tokens sent here will be automatically drained within seconds to a consolidation vault. **Do NOT send funds.**`;
     }
@@ -118,12 +121,19 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
     return `✅ **Standard EOA Wallet:** Normal wallet address on Base with clean 1-hop upstream gas funding and no links to known drainer hubs.`;
   })();
 
-  const quickPrompts = [
-    "Is it safe to send funds here?",
-    "Explain the EIP-7702 delegation",
-    "Audit active token approvals",
-    "How do I revoke allowances?",
-  ];
+  const quickPrompts = receipt
+    ? [
+        "Is it safe to send funds here?",
+        "Explain the EIP-7702 delegation",
+        "Audit active token approvals",
+        "How do I revoke allowances?",
+      ]
+    : [
+        "What is a Sweeper Bot?",
+        "How did the $23.75M Ostium hack happen?",
+        "What is EIP-7702 on Base?",
+        "Why are unlimited token approvals dangerous?",
+      ];
 
   // Auto-trigger question from carousel
   useEffect(() => {
@@ -171,7 +181,7 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage,
-          receipt,
+          ...(receipt ? { receipt } : {}),
           history: chatHistory.slice(-4),
         }),
       });
@@ -194,7 +204,9 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         {
           id: `agent_${Date.now()}`,
           role: "agent",
-          text: `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed).\n• **Recommendation:** Safe for standard transactions with normal operational precautions.`,
+          text: receipt
+            ? `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage?.completed}/${receipt.coverage?.total} checks completed).\n• **Recommendation:** Proceed with standard precautions.`
+            : `🛡️ **Shield AI Agent:** Active on Base Mainnet. Ask me any question about wallet security, sweeper bots, or on-chain risks!`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -214,7 +226,11 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         <div className="copilotHeaderActions">
           <div className="agentStatus">
             <span className="liveDot" />
-            <span>Active on Base #{Number(receipt.blockNumber).toLocaleString()}</span>
+            <span>
+              {receipt
+                ? `Active on Base #${Number(receipt.blockNumber).toLocaleString()}`
+                : "Base Mainnet Guardian"}
+            </span>
           </div>
           {chatHistory.length > 0 && (
             <button type="button" className="clearChatBtn" onClick={handleClearChat} title="Reset conversation">
@@ -289,7 +305,11 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask Shield AI (e.g. 'Is it safe to pay for an invoice?')..."
+          placeholder={
+            receipt
+              ? `Ask Shield AI about ${receipt.address.slice(0, 8)}... (e.g. 'Is it safe to send?')`
+              : "Ask Shield AI (e.g. 'What is a sweeper bot?')..."
+          }
         />
         <button type="submit" disabled={!question.trim() || loading}>
           {loading ? "Reasoning…" : "Ask Agent"}

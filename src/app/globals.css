@@ -1957,6 +1957,12 @@ a { color: inherit; }
   line-height: 1.45;
 }
 
+/* Chat Section Container */
+.chatSection {
+  margin: 16px auto 24px;
+  width: 100%;
+}
+
 /* Enhanced AI Agent Copilot Component */
 .agentCopilot {
   margin-top: 24px;
