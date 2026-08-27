@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { parseEther, isAddress, getAddress, type Address, type Hex } from "viem";
 import type { Eip1193Provider } from "@/lib/wallet";
 import type { ScanReceipt, EvidenceItem } from "@/lib/scan-types";
+import { baseClient } from "@/lib/base-client";
 
 interface ProtectedSendModalProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ export default function ProtectedSendModal({
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenDecimals, setCustomTokenDecimals] = useState(18);
   const [customTokenSymbol, setCustomTokenSymbol] = useState("");
+  const [tokenPrice, setTokenPrice] = useState<number>(2500);
+  const [userBalance, setUserBalance] = useState<number>(0);
   const [scanningRecipient, setScanningRecipient] = useState(false);
   const [recipientScan, setRecipientScan] = useState<ScanReceipt | null>(null);
   const [showFullEvidence, setShowFullEvidence] = useState(false);
@@ -46,7 +49,70 @@ export default function ProtectedSendModal({
   const [error, setError] = useState("");
   const [overrideWarning, setOverrideWarning] = useState(false);
 
-  // Auto-scan recipient address with low latency
+  // Fetch token price in USD
+  useEffect(() => {
+    let tokenParam = selectedTokenSymbol;
+    let addrParam = "";
+    if (selectedTokenSymbol === "CUSTOM") {
+      addrParam = customTokenAddress;
+    }
+    fetch(`/api/prices?token=${tokenParam}&address=${addrParam}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.price === "number") setTokenPrice(data.price);
+      })
+      .catch(() => {});
+  }, [selectedTokenSymbol, customTokenAddress]);
+
+  // Read User Balance for selected asset
+  useEffect(() => {
+    if (!senderAddress || !isAddress(senderAddress)) return;
+
+    const fetchBalance = async () => {
+      try {
+        const owner = getAddress(senderAddress);
+        if (selectedTokenSymbol === "ETH") {
+          const bal = await baseClient.getBalance({ address: owner });
+          setUserBalance(Number(bal) / 1e18);
+        } else {
+          // Token balance
+          let tokenAddr: Address | null = null;
+          let dec = 18;
+
+          if (selectedTokenSymbol === "CUSTOM") {
+            if (isAddress(customTokenAddress)) {
+              tokenAddr = getAddress(customTokenAddress);
+              dec = customTokenDecimals;
+            }
+          } else {
+            const known = POPULAR_TOKENS.find((t) => t.symbol === selectedTokenSymbol);
+            if (known?.address) {
+              tokenAddr = getAddress(known.address);
+              dec = known.decimals;
+            }
+          }
+
+          if (tokenAddr) {
+            const cleanOwner = owner.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+            const res = await baseClient.call({
+              to: tokenAddr,
+              data: `0x70a08231${cleanOwner}` as Hex, // balanceOf(owner)
+            });
+            if (res.data) {
+              const rawBal = BigInt(res.data);
+              setUserBalance(Number(rawBal) / Math.pow(10, dec));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Error reading balance:", err);
+      }
+    };
+
+    fetchBalance();
+  }, [senderAddress, selectedTokenSymbol, customTokenAddress, customTokenDecimals]);
+
+  // Auto-scan recipient address
   useEffect(() => {
     const clean = recipient.trim();
     if (!clean || !isAddress(clean)) {
@@ -103,10 +169,28 @@ export default function ProtectedSendModal({
 
   const isSweeper = recipientScan?.clusterAnalysis?.isSweeperActive;
 
+  const amountNum = parseFloat(amount) || 0;
+  const isInsufficientBalance = amountNum > userBalance;
+  const dollarEquivalent = (amountNum * tokenPrice).toFixed(2);
+  const userBalanceUsd = (userBalance * tokenPrice).toFixed(2);
+
+  const handleMaxClick = () => {
+    if (userBalance > 0) {
+      // Leave slight dust for gas if sending native ETH
+      const maxAmount = selectedTokenSymbol === "ETH" ? Math.max(0, userBalance - 0.0005) : userBalance;
+      setAmount(maxAmount.toString());
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!provider || !isAddress(recipient) || !amount || Number(amount) <= 0) {
       setError("Please provide a valid recipient address and amount.");
+      return;
+    }
+
+    if (isInsufficientBalance) {
+      setError(`Insufficient balance. You have ${userBalance} ${selectedTokenSymbol}, but are trying to send ${amount}.`);
       return;
     }
 
@@ -138,7 +222,6 @@ export default function ProtectedSendModal({
 
         setTxHash(hash);
       } else {
-        // Find token contract
         let tokenContractAddr: Address;
         let decimals = 18;
 
@@ -190,7 +273,7 @@ export default function ProtectedSendModal({
             <span className="sendShieldIcon">🛡️</span>
             <div>
               <h3>Protected Send on Base</h3>
-              <p>Shield verifies the recipient and money-trail on-chain before you broadcast</p>
+              <p>Shield scans recipient and verifies balances before broadcasting</p>
             </div>
           </div>
           <button type="button" className="closeBtn" onClick={onClose} aria-label="Close modal">
@@ -199,10 +282,20 @@ export default function ProtectedSendModal({
         </div>
 
         <form onSubmit={handleSend} className="sendForm">
-          {/* Asset & Amount Selector */}
+          {/* Asset & Amount Selector with live USD equivalent and Balance */}
           <div className="formGroup">
-            <label>Asset & Amount</label>
-            <div className="amountInputGroup">
+            <div className="labelRow">
+              <label>Asset & Amount</label>
+              <div className="balanceRow">
+                <span>Available: {userBalance.toFixed(selectedTokenSymbol === "USDC" ? 2 : 5)} {selectedTokenSymbol}</span>
+                <span className="balanceUsdTag">(${userBalanceUsd} USD)</span>
+                <button type="button" className="maxBtn" onClick={handleMaxClick}>
+                  MAX
+                </button>
+              </div>
+            </div>
+
+            <div className={`amountInputGroup ${isInsufficientBalance ? "inputErrorGroup" : ""}`}>
               <input
                 type="number"
                 step="any"
@@ -223,6 +316,21 @@ export default function ProtectedSendModal({
                 ))}
               </select>
             </div>
+
+            {/* USD Price Equivalent Indicator */}
+            {amountNum > 0 && (
+              <div className="priceEquivalentRow">
+                <span className="usdEquivalentText">≈ ${dollarEquivalent} USD</span>
+                <span className="unitPriceText">(1 {selectedTokenSymbol} = ${tokenPrice.toLocaleString()} USD)</span>
+              </div>
+            )}
+
+            {/* Insufficient Balance Alert */}
+            {isInsufficientBalance && (
+              <div className="insufficientBalanceAlert">
+                ⚠️ Insufficient balance: You have {userBalance.toFixed(5)} {selectedTokenSymbol}, but entered {amount} {selectedTokenSymbol}.
+              </div>
+            )}
           </div>
 
           {/* Custom ERC-20 Address Input */}
@@ -399,15 +507,20 @@ export default function ProtectedSendModal({
                 sending ||
                 !amount ||
                 Number(amount) <= 0 ||
+                isInsufficientBalance ||
                 !isAddress(recipient) ||
                 (isBlocked && !overrideWarning)
               }
-              className={`sendConfirmBtn ${isBlocked && !overrideWarning ? "btnDisabled" : ""}`}
+              className={`sendConfirmBtn ${
+                isBlocked && !overrideWarning || isInsufficientBalance ? "btnDisabled" : ""
+              }`}
             >
               {sending ? (
                 <>
                   <span className="miniSpinner" /> Broadcasting…
                 </>
+              ) : isInsufficientBalance ? (
+                "Insufficient Balance"
               ) : isBlocked ? (
                 overrideWarning ? "Override & Send" : "Blocked by Shield"
               ) : (

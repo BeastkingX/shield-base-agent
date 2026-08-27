@@ -7,9 +7,11 @@ import type {
   EvidenceItem,
   ScanReceipt,
 } from "@/lib/scan-types";
-import { shortAddress } from "@/lib/wallet";
+import { shortAddress, getInjectedWallet } from "@/lib/wallet";
 import WalletPanel from "@/components/WalletPanel";
 import AgentCopilot from "@/components/AgentCopilot";
+import WalletHealthCard from "@/components/WalletHealthCard";
+import ProtectedSendModal from "@/components/ProtectedSendModal";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
@@ -64,6 +66,8 @@ export default function Home() {
   const [filter, setFilter] = useState<"all" | EvidenceCategory>("all");
   const [copied, setCopied] = useState<"address" | "receipt" | "">("");
   const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
+  const [showSelfTechnicalEvidence, setShowSelfTechnicalEvidence] = useState(false);
+  const [showProtectedSend, setShowProtectedSend] = useState(false);
   const resultsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -286,150 +290,285 @@ export default function Home() {
 
       {receipt ? (
         <section className="results shell" ref={resultsRef} aria-live="polite">
-          <div className="resultTopline">
-            <div>
-              <span className="sectionLabel">Analysis complete</span>
-              <div className="addressLine">
-                <h2>{shortAddress(receipt.address)}</h2>
-                {connectedAccount === receipt.address && (
-                  <span className="connectedChip">Connected wallet</span>
-                )}
-                <button
-                  className="iconButton"
-                  type="button"
-                  onClick={() => copyText(receipt.address, "address")}
-                  aria-label="Copy full address"
-                >
-                  {copied === "address" ? "Copied" : "Copy"}
-                </button>
-              </div>
-              <p>Receipt {receipt.receiptId}</p>
-            </div>
-            <div className="resultActions">
-              <a href={`https://basescan.org/address/${receipt.address}`} target="_blank" rel="noreferrer">BaseScan ↗</a>
-              <button type="button" onClick={() => copyText(JSON.stringify(receipt, null, 2), "receipt")}>
-                {copied === "receipt" ? "Copied JSON" : "Copy receipt"}
-              </button>
-              <button className="primaryAction" type="button" onClick={downloadReceipt}>Download JSON</button>
-            </div>
-          </div>
+          {connectedAccount?.toLowerCase() === receipt.address.toLowerCase() && (
+            <WalletHealthCard
+              receipt={receipt}
+              onOpenSendModal={() => setShowProtectedSend(true)}
+              onToggleTechnicalEvidence={() =>
+                setShowSelfTechnicalEvidence(!showSelfTechnicalEvidence)
+              }
+              showTechnicalEvidence={showSelfTechnicalEvidence}
+            />
+          )}
 
-          <div className={`verdictCard verdict-${verdictClass(receipt.verdict)}`}>
-            <div className="verdictSignal" aria-hidden="true"><span /></div>
-            <div className="verdictCopy">
-              <span className="sectionLabel">Deterministic verdict</span>
-              <h3>{receipt.verdict}</h3>
-              <p>{receipt.summary}</p>
-              <div className="ruleLine">
-                Rule engine v{receipt.riskEngineVersion} · {receipt.firedRules.map((rule) => rule.id).join(", ")}
-              </div>
-            </div>
-            <div className="coverageBox">
-              <strong>{Math.round((receipt.coverage.completed / receipt.coverage.total) * 100)}%</strong>
-              <span>evidence coverage</span>
-              <div><i style={{ width: `${(receipt.coverage.completed / receipt.coverage.total) * 100}%` }} /></div>
-              <small>{receipt.coverage.completed} completed · {receipt.coverage.unavailable} unavailable</small>
-            </div>
-          </div>
-
-          <div className="overviewGrid" aria-label="Scan overview">
-            <article>
-              <span>Target</span>
-              <strong>{receipt.targetType === "contract" ? "Smart contract" : "Wallet address"}</strong>
-              <small>Classified from live bytecode</small>
-            </article>
-            <article>
-              <span>Reference block</span>
-              <strong>{Number(receipt.blockNumber).toLocaleString()}</strong>
-              <small>{new Date(receipt.blockTimestamp).toLocaleString()}</small>
-            </article>
-            <article>
-              <span>Data sources</span>
-              <strong>Base RPC + indexed explorer</strong>
-              <small>{receipt.evidence.filter((item) => ["etherscan-v2", "blockscout-pro"].includes(item.source) && item.status !== "unavailable").length ? "Explorer evidence returned" : "Explorer evidence unavailable"}</small>
-            </article>
-            <article>
-              <span>Captured</span>
-              <strong>{new Date(receipt.scannedAt).toLocaleTimeString()}</strong>
-              <small>{new Date(receipt.scannedAt).toLocaleDateString()}</small>
-            </article>
-          </div>
-
-          <AgentCopilot receipt={receipt} />
-
-          <div className="evidenceSection">
-            <div className="evidenceHeading">
-              <div>
-                <span className="sectionLabel">Evidence trail</span>
-                <h3>Every conclusion, inspectable</h3>
-                <p>Unavailable checks remain visible and never count as safe.</p>
-              </div>
-              <span className="evidenceCount">{receipt.evidence.length} checks</span>
-            </div>
-
-            <div className="filterBar" role="tablist" aria-label="Filter evidence">
-              {FILTERS.map((item) => {
-                const count = item.id === "all"
-                  ? receipt.evidence.length
-                  : receipt.evidence.filter((evidenceItem) => evidenceItem.category === item.id).length;
-                if (item.id !== "all" && count === 0) return null;
-                return (
-                  <button
-                    key={item.id}
-                    className={filter === item.id ? "active" : ""}
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === item.id}
-                    onClick={() => setFilter(item.id)}
-                  >
-                    {item.label}<span>{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="evidenceGrid">
-              {filteredEvidence.map((item, index) => (
-                <details className={`evidenceCard status-${item.status}`} key={item.id} open={index === 0}>
-                  <summary>
-                    <span className="statusIcon" aria-hidden="true" />
-                    <span className="evidenceTitle">
-                      <span className="categoryName">{categoryLabel(item.category)}</span>
-                      <strong>{item.label}</strong>
-                      <small>{item.claim}</small>
-                    </span>
-                    <span className="statusBadge">{statusLabel(item.status)}</span>
-                    <span className="chevron">⌄</span>
-                  </summary>
-                  <div className="evidenceBody">
-                    {item.facts && Object.keys(item.facts).length > 0 && (
-                      <div className="factsGrid">
-                        {Object.entries(item.facts).map(([label, value]) => (
-                          <div key={label}><span>{label}</span><strong>{displayFact(value)}</strong></div>
-                        ))}
-                      </div>
+          {(connectedAccount?.toLowerCase() !== receipt.address.toLowerCase() ||
+            showSelfTechnicalEvidence) && (
+            <>
+              <div className="resultTopline">
+                <div>
+                  <span className="sectionLabel">Analysis complete</span>
+                  <div className="addressLine">
+                    <h2>{shortAddress(receipt.address)}</h2>
+                    {connectedAccount?.toLowerCase() === receipt.address.toLowerCase() && (
+                      <span className="connectedChip">Connected wallet</span>
                     )}
-                    <div className="technicalRow">
-                      <div><span>Source method</span><code>{item.source} · {item.method}</code></div>
-                      <div><span>Evidence ID</span><code>{item.id}</code></div>
-                      <div><span>Observed at block</span><code>{Number(item.blockNumber).toLocaleString()}</code></div>
-                      <a href={item.referenceUrl || item.explorerUrl} target="_blank" rel="noreferrer">Inspect source ↗</a>
-                    </div>
-                    {item.limitations.length > 0 && (
-                      <div className="limitations">
-                        <strong>What this evidence does not prove</strong>
-                        <ul>{item.limitations.map((text) => <li key={text}>{text}</li>)}</ul>
-                      </div>
-                    )}
+                    <button
+                      className="iconButton"
+                      type="button"
+                      onClick={() => copyText(receipt.address, "address")}
+                      aria-label="Copy full address"
+                    >
+                      {copied === "address" ? "Copied" : "Copy"}
+                    </button>
                   </div>
-                </details>
-              ))}
-            </div>
-          </div>
+                  <p>Receipt {receipt.receiptId}</p>
+                </div>
+                <div className="resultActions">
+                  <a
+                    href={`https://basescan.org/address/${receipt.address}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    BaseScan ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyText(JSON.stringify(receipt, null, 2), "receipt")
+                    }
+                  >
+                    {copied === "receipt" ? "Copied JSON" : "Copy receipt"}
+                  </button>
+                  <button
+                    className="primaryAction"
+                    type="button"
+                    onClick={downloadReceipt}
+                  >
+                    Download JSON
+                  </button>
+                </div>
+              </div>
+
+              <div className={`verdictCard verdict-${verdictClass(receipt.verdict)}`}>
+                <div className="verdictSignal" aria-hidden="true">
+                  <span />
+                </div>
+                <div className="verdictCopy">
+                  <span className="sectionLabel">Deterministic verdict</span>
+                  <h3>{receipt.verdict}</h3>
+                  <p>{receipt.summary}</p>
+                  <div className="ruleLine">
+                    Rule engine v{receipt.riskEngineVersion} ·{" "}
+                    {receipt.firedRules.map((rule) => rule.id).join(", ")}
+                  </div>
+                </div>
+                <div className="coverageBox">
+                  <strong>
+                    {Math.round(
+                      (receipt.coverage.completed / receipt.coverage.total) * 100
+                    )}
+                    %
+                  </strong>
+                  <span>evidence coverage</span>
+                  <div>
+                    <i
+                      style={{
+                        width: `${
+                          (receipt.coverage.completed / receipt.coverage.total) *
+                          100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <small>
+                    {receipt.coverage.completed} completed ·{" "}
+                    {receipt.coverage.unavailable} unavailable
+                  </small>
+                </div>
+              </div>
+
+              <div className="overviewGrid" aria-label="Scan overview">
+                <article>
+                  <span>Target</span>
+                  <strong>
+                    {receipt.targetType === "contract"
+                      ? "Smart contract"
+                      : "Wallet address"}
+                  </strong>
+                  <small>Classified from live bytecode</small>
+                </article>
+                <article>
+                  <span>Reference block</span>
+                  <strong>{Number(receipt.blockNumber).toLocaleString()}</strong>
+                  <small>
+                    {new Date(receipt.blockTimestamp).toLocaleString()}
+                  </small>
+                </article>
+                <article>
+                  <span>Data sources</span>
+                  <strong>Base RPC + indexed explorer</strong>
+                  <small>
+                    {receipt.evidence.filter(
+                      (item) =>
+                        ["etherscan-v2", "blockscout-pro"].includes(
+                          item.source
+                        ) && item.status !== "unavailable"
+                    ).length
+                      ? "Explorer evidence returned"
+                      : "Explorer evidence unavailable"}
+                  </small>
+                </article>
+                <article>
+                  <span>Captured</span>
+                  <strong>
+                    {new Date(receipt.scannedAt).toLocaleTimeString()}
+                  </strong>
+                  <small>
+                    {new Date(receipt.scannedAt).toLocaleDateString()}
+                  </small>
+                </article>
+              </div>
+
+              <AgentCopilot receipt={receipt} />
+
+              <div className="evidenceSection">
+                <div className="evidenceHeading">
+                  <div>
+                    <span className="sectionLabel">Evidence trail</span>
+                    <h3>Every conclusion, inspectable</h3>
+                    <p>
+                      Unavailable checks remain visible and never count as safe.
+                    </p>
+                  </div>
+                  <span className="evidenceCount">
+                    {receipt.evidence.length} checks
+                  </span>
+                </div>
+
+                <div
+                  className="filterBar"
+                  role="tablist"
+                  aria-label="Filter evidence"
+                >
+                  {FILTERS.map((item) => {
+                    const count =
+                      item.id === "all"
+                        ? receipt.evidence.length
+                        : receipt.evidence.filter(
+                            (evidenceItem) => evidenceItem.category === item.id
+                          ).length;
+                    if (item.id !== "all" && count === 0) return null;
+                    return (
+                      <button
+                        key={item.id}
+                        className={filter === item.id ? "active" : ""}
+                        type="button"
+                        role="tab"
+                        aria-selected={filter === item.id}
+                        onClick={() => setFilter(item.id)}
+                      >
+                        {item.label}
+                        <span>{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="evidenceGrid">
+                  {filteredEvidence.map((item, index) => (
+                    <details
+                      className={`evidenceCard status-${item.status}`}
+                      key={item.id}
+                      open={index === 0}
+                    >
+                      <summary>
+                        <span className="statusIcon" aria-hidden="true" />
+                        <span className="evidenceTitle">
+                          <span className="categoryName">
+                            {categoryLabel(item.category)}
+                          </span>
+                          <strong>{item.label}</strong>
+                          <small>{item.claim}</small>
+                        </span>
+                        <span className="statusBadge">
+                          {statusLabel(item.status)}
+                        </span>
+                        <span className="chevron">⌄</span>
+                      </summary>
+                      <div className="evidenceBody">
+                        {item.facts && Object.keys(item.facts).length > 0 && (
+                          <div className="factsGrid">
+                            {Object.entries(item.facts).map(
+                              ([label, value]) => (
+                                <div key={label}>
+                                  <span>{label}</span>
+                                  <strong>{displayFact(value)}</strong>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
+                        <div className="technicalRow">
+                          <div>
+                            <span>Source method</span>
+                            <code>
+                              {item.source} · {item.method}
+                            </code>
+                          </div>
+                          <div>
+                            <span>Evidence ID</span>
+                            <code>{item.id}</code>
+                          </div>
+                          <div>
+                            <span>Observed at block</span>
+                            <code>
+                              {Number(item.blockNumber).toLocaleString()}
+                            </code>
+                          </div>
+                          <a
+                            href={item.referenceUrl || item.explorerUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Inspect source ↗
+                          </a>
+                        </div>
+                        {item.limitations.length > 0 && (
+                          <div className="limitations">
+                            <strong>What this evidence does not prove</strong>
+                            <ul>
+                              {item.limitations.map((text) => (
+                                <li key={text}>{text}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="receiptFooter">
-            <div><span aria-hidden="true">!</span><p><strong>Decision support, not a guarantee.</strong> {receipt.limitations.join(" ")}</p></div>
-            <button type="button" onClick={() => { setReceipt(null); setAddress(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Start a new scan</button>
+            <div>
+              <span aria-hidden="true">!</span>
+              <p>
+                <strong>Decision support, not a guarantee.</strong>{" "}
+                {receipt.limitations.join(" ")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setReceipt(null);
+                setAddress("");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              Start a new scan
+            </button>
           </div>
         </section>
       ) : (
@@ -458,6 +597,15 @@ export default function Home() {
         <p>Open evidence for safer decisions on Base.</p>
         <div><a href="https://github.com/BeastkingX/shield-base-agent" target="_blank" rel="noreferrer">GitHub ↗</a><span>v0.3.0</span></div>
       </footer>
+
+      {showProtectedSend && (
+        <ProtectedSendModal
+          isOpen={showProtectedSend}
+          onClose={() => setShowProtectedSend(false)}
+          senderAddress={connectedAccount || ""}
+          provider={getInjectedWallet()?.provider ?? null}
+        />
+      )}
     </main>
   );
 }
