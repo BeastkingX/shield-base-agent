@@ -5,6 +5,7 @@ import { parseEther, isAddress, getAddress, type Address, type Hex } from "viem"
 import type { Eip1193Provider } from "@/lib/wallet";
 import type { ScanReceipt, EvidenceItem } from "@/lib/scan-types";
 import { baseClient } from "@/lib/base-client";
+import TokenSelector, { SUPPORTED_BASE_TOKENS, type TokenItem } from "./TokenSelector";
 
 interface ProtectedSendModalProps {
   isOpen: boolean;
@@ -12,20 +13,6 @@ interface ProtectedSendModalProps {
   senderAddress: string;
   provider: Eip1193Provider | null;
 }
-
-const POPULAR_TOKENS = [
-  { symbol: "ETH", name: "Native Ether", address: null, decimals: 18 },
-  { symbol: "USDC", name: "USD Coin", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
-  { symbol: "WETH", name: "Wrapped Ether", address: "0x4200000000000000000000000000000000000006", decimals: 18 },
-  { symbol: "DEGEN", name: "Degen Token", address: "0x4ed4e862860bed51a9570b96d89af5e1b0efefed", decimals: 18 },
-  { symbol: "cbETH", name: "Coinbase Staked ETH", address: "0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22", decimals: 18 },
-  { symbol: "DAI", name: "Dai Stablecoin", address: "0x50c5725949a6f0c72e6c4a641f24049a917db0cb", decimals: 18 },
-  { symbol: "AERO", name: "Aerodrome", address: "0x940181a94a35a4569e4529a3cdfb74e38fd98631", decimals: 18 },
-  { symbol: "BRETT", name: "Brett", address: "0x532f27101965dd16442e59d40670faf5ebb142e4", decimals: 18 },
-  { symbol: "TOSHI", name: "Toshi", address: "0xac1bd2486aaf3b5c0fc3fd868558b082a531b2b4", decimals: 18 },
-  { symbol: "VIRTUAL", name: "Virtual Protocol", address: "0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b", decimals: 18 },
-  { symbol: "CUSTOM", name: "Custom ERC-20 Address...", address: "custom", decimals: 18 },
-];
 
 export default function ProtectedSendModal({
   isOpen,
@@ -35,10 +22,8 @@ export default function ProtectedSendModal({
 }: ProtectedSendModalProps) {
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
-  const [selectedTokenSymbol, setSelectedTokenSymbol] = useState("ETH");
+  const [selectedToken, setSelectedToken] = useState<TokenItem>(SUPPORTED_BASE_TOKENS[0]);
   const [customTokenAddress, setCustomTokenAddress] = useState("");
-  const [customTokenDecimals, setCustomTokenDecimals] = useState(18);
-  const [customTokenSymbol, setCustomTokenSymbol] = useState("");
   const [tokenPrice, setTokenPrice] = useState<number>(2500);
   const [userBalance, setUserBalance] = useState<number>(0);
   const [scanningRecipient, setScanningRecipient] = useState(false);
@@ -51,9 +36,9 @@ export default function ProtectedSendModal({
 
   // Fetch token price in USD
   useEffect(() => {
-    let tokenParam = selectedTokenSymbol;
-    let addrParam = "";
-    if (selectedTokenSymbol === "CUSTOM") {
+    let tokenParam = selectedToken.symbol;
+    let addrParam = selectedToken.address || "";
+    if (selectedToken.symbol === "CUSTOM") {
       addrParam = customTokenAddress;
     }
     fetch(`/api/prices?token=${tokenParam}&address=${addrParam}`)
@@ -62,7 +47,7 @@ export default function ProtectedSendModal({
         if (typeof data.price === "number") setTokenPrice(data.price);
       })
       .catch(() => {});
-  }, [selectedTokenSymbol, customTokenAddress]);
+  }, [selectedToken, customTokenAddress]);
 
   // Read User Balance for selected asset
   useEffect(() => {
@@ -71,25 +56,19 @@ export default function ProtectedSendModal({
     const fetchBalance = async () => {
       try {
         const owner = getAddress(senderAddress);
-        if (selectedTokenSymbol === "ETH") {
+        if (selectedToken.symbol === "ETH") {
           const bal = await baseClient.getBalance({ address: owner });
           setUserBalance(Number(bal) / 1e18);
         } else {
-          // Token balance
           let tokenAddr: Address | null = null;
-          let dec = 18;
+          let dec = selectedToken.decimals || 18;
 
-          if (selectedTokenSymbol === "CUSTOM") {
+          if (selectedToken.symbol === "CUSTOM") {
             if (isAddress(customTokenAddress)) {
               tokenAddr = getAddress(customTokenAddress);
-              dec = customTokenDecimals;
             }
-          } else {
-            const known = POPULAR_TOKENS.find((t) => t.symbol === selectedTokenSymbol);
-            if (known?.address) {
-              tokenAddr = getAddress(known.address);
-              dec = known.decimals;
-            }
+          } else if (selectedToken.address) {
+            tokenAddr = getAddress(selectedToken.address);
           }
 
           if (tokenAddr) {
@@ -110,7 +89,7 @@ export default function ProtectedSendModal({
     };
 
     fetchBalance();
-  }, [senderAddress, selectedTokenSymbol, customTokenAddress, customTokenDecimals]);
+  }, [senderAddress, selectedToken, customTokenAddress]);
 
   // Auto-scan recipient address
   useEffect(() => {
@@ -145,21 +124,6 @@ export default function ProtectedSendModal({
     return () => clearTimeout(timer);
   }, [recipient]);
 
-  // Handle custom token inspection
-  useEffect(() => {
-    if (selectedTokenSymbol !== "CUSTOM" || !customTokenAddress.trim() || !isAddress(customTokenAddress.trim())) {
-      return;
-    }
-
-    fetch(`/api/token?address=${customTokenAddress.trim()}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.decimals) setCustomTokenDecimals(data.decimals);
-        if (data.symbol) setCustomTokenSymbol(data.symbol);
-      })
-      .catch(() => {});
-  }, [selectedTokenSymbol, customTokenAddress]);
-
   if (!isOpen) return null;
 
   const isBlocked =
@@ -176,8 +140,7 @@ export default function ProtectedSendModal({
 
   const handleMaxClick = () => {
     if (userBalance > 0) {
-      // Leave slight dust for gas if sending native ETH
-      const maxAmount = selectedTokenSymbol === "ETH" ? Math.max(0, userBalance - 0.0005) : userBalance;
+      const maxAmount = selectedToken.symbol === "ETH" ? Math.max(0, userBalance - 0.0005) : userBalance;
       setAmount(maxAmount.toString());
     }
   };
@@ -190,7 +153,7 @@ export default function ProtectedSendModal({
     }
 
     if (isInsufficientBalance) {
-      setError(`Insufficient balance. You have ${userBalance} ${selectedTokenSymbol}, but are trying to send ${amount}.`);
+      setError(`Insufficient balance. You have ${userBalance} ${selectedToken.symbol}, but are trying to send ${amount}.`);
       return;
     }
 
@@ -207,7 +170,7 @@ export default function ProtectedSendModal({
       const from = getAddress(senderAddress);
       const to = getAddress(recipient);
 
-      if (selectedTokenSymbol === "ETH") {
+      if (selectedToken.symbol === "ETH") {
         const valueHex = `0x${parseEther(amount).toString(16)}`;
         const hash = (await provider.request({
           method: "eth_sendTransaction",
@@ -223,21 +186,18 @@ export default function ProtectedSendModal({
         setTxHash(hash);
       } else {
         let tokenContractAddr: Address;
-        let decimals = 18;
+        let decimals = selectedToken.decimals || 18;
 
-        if (selectedTokenSymbol === "CUSTOM") {
+        if (selectedToken.symbol === "CUSTOM") {
           if (!isAddress(customTokenAddress)) {
             throw new Error("Invalid custom token contract address.");
           }
           tokenContractAddr = getAddress(customTokenAddress);
-          decimals = customTokenDecimals;
         } else {
-          const known = POPULAR_TOKENS.find((t) => t.symbol === selectedTokenSymbol);
-          if (!known || !known.address) {
+          if (!selectedToken.address) {
             throw new Error("Token configuration error.");
           }
-          tokenContractAddr = getAddress(known.address);
-          decimals = known.decimals;
+          tokenContractAddr = getAddress(selectedToken.address);
         }
 
         const cleanTo = to.toLowerCase().replace(/^0x/, "").padStart(64, "0");
@@ -287,7 +247,7 @@ export default function ProtectedSendModal({
             <div className="labelRow">
               <label>Asset & Amount</label>
               <div className="balanceRow">
-                <span>Available: {userBalance.toFixed(selectedTokenSymbol === "USDC" ? 2 : 5)} {selectedTokenSymbol}</span>
+                <span>Available: {userBalance.toFixed(selectedToken.symbol === "USDC" ? 2 : 5)} {selectedToken.symbol}</span>
                 <span className="balanceUsdTag">(${userBalanceUsd} USD)</span>
                 <button type="button" className="maxBtn" onClick={handleMaxClick}>
                   MAX
@@ -305,36 +265,32 @@ export default function ProtectedSendModal({
                 placeholder="0.0"
                 required
               />
-              <select
-                value={selectedTokenSymbol}
-                onChange={(e) => setSelectedTokenSymbol(e.target.value)}
-              >
-                {POPULAR_TOKENS.map((token) => (
-                  <option key={token.symbol} value={token.symbol}>
-                    {token.symbol} {token.name !== token.symbol && `— ${token.name}`}
-                  </option>
-                ))}
-              </select>
+              <TokenSelector
+                selectedToken={selectedToken}
+                onSelectToken={(t) => setSelectedToken(t)}
+                customAddress={customTokenAddress}
+                onCustomAddressChange={setCustomTokenAddress}
+              />
             </div>
 
             {/* USD Price Equivalent Indicator */}
             {amountNum > 0 && (
               <div className="priceEquivalentRow">
                 <span className="usdEquivalentText">≈ ${dollarEquivalent} USD</span>
-                <span className="unitPriceText">(1 {selectedTokenSymbol} = ${tokenPrice.toLocaleString()} USD)</span>
+                <span className="unitPriceText">(1 {selectedToken.symbol} = ${tokenPrice.toLocaleString()} USD)</span>
               </div>
             )}
 
             {/* Insufficient Balance Alert */}
             {isInsufficientBalance && (
               <div className="insufficientBalanceAlert">
-                ⚠️ Insufficient balance: You have {userBalance.toFixed(5)} {selectedTokenSymbol}, but entered {amount} {selectedTokenSymbol}.
+                ⚠️ Insufficient balance: You have {userBalance.toFixed(5)} {selectedToken.symbol}, but entered {amount} {selectedToken.symbol}.
               </div>
             )}
           </div>
 
           {/* Custom ERC-20 Address Input */}
-          {selectedTokenSymbol === "CUSTOM" && (
+          {selectedToken.symbol === "CUSTOM" && (
             <div className="formGroup">
               <label>Custom ERC-20 Token Contract Address</label>
               <input
@@ -344,11 +300,6 @@ export default function ProtectedSendModal({
                 placeholder="Paste token contract (0x...)"
                 required
               />
-              {customTokenSymbol && (
-                <span className="tokenDetectedTag">
-                  Detected: {customTokenSymbol} ({customTokenDecimals} decimals)
-                </span>
-              )}
             </div>
           )}
 

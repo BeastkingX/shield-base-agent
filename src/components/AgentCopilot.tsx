@@ -1,16 +1,93 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
 
 interface AgentCopilotProps {
   receipt: ScanReceipt;
 }
 
+interface ChatMessage {
+  role: "user" | "agent";
+  text: string;
+}
+
+/**
+ * Clean markdown formatter: converts **bold**, code tags, bullets, and linebreaks
+ * into clean formatted HTML elements without showing raw asterisks (*).
+ */
+function FormattedMessage({ text }: { text: string }) {
+  const lines = text.split("\n");
+
+  return (
+    <div className="formattedMessageContent">
+      {lines.map((line, lineIdx) => {
+        if (!line.trim()) {
+          return <div key={lineIdx} className="lineSpacer" />;
+        }
+
+        // Bullet point
+        const isBullet = line.trim().startsWith("•") || line.trim().startsWith("-");
+        const cleanLine = isBullet ? line.trim().replace(/^[•-]\s*/, "") : line;
+
+        // Parse **bold** and `code`
+        const parts = [];
+        let current = cleanLine;
+        let key = 0;
+
+        while (current.length > 0) {
+          const boldMatch = current.match(/\*\*(.*?)\*\*/);
+          const codeMatch = current.match(/`(.*?)`/);
+
+          let firstMatch: { type: "bold" | "code"; index: number; length: number; content: string } | null = null;
+
+          if (boldMatch && boldMatch.index !== undefined) {
+            firstMatch = { type: "bold", index: boldMatch.index, length: boldMatch[0].length, content: boldMatch[1] };
+          }
+          if (codeMatch && codeMatch.index !== undefined) {
+            if (!firstMatch || codeMatch.index < firstMatch.index) {
+              firstMatch = { type: "code", index: codeMatch.index, length: codeMatch[0].length, content: codeMatch[1] };
+            }
+          }
+
+          if (!firstMatch) {
+            parts.push(<span key={key++}>{current}</span>);
+            break;
+          }
+
+          if (firstMatch.index > 0) {
+            parts.push(<span key={key++}>{current.slice(0, firstMatch.index)}</span>);
+          }
+
+          if (firstMatch.type === "bold") {
+            parts.push(<strong key={key++} className="boldText">{firstMatch.content}</strong>);
+          } else {
+            parts.push(<code key={key++} className="inlineCode">{firstMatch.content}</code>);
+          }
+
+          current = current.slice(firstMatch.index + firstMatch.length);
+        }
+
+        if (isBullet) {
+          return (
+            <div key={lineIdx} className="bulletItem">
+              <span className="bulletDot">•</span>
+              <div className="bulletText">{parts}</div>
+            </div>
+          );
+        }
+
+        return <p key={lineIdx} className="normalLine">{parts}</p>;
+      })}
+    </div>
+  );
+}
+
 export default function AgentCopilot({ receipt }: AgentCopilotProps) {
   const [question, setQuestion] = useState("");
-  const [chatHistory, setChatHistory] = useState<Array<{ role: "user" | "agent"; text: string }>>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isSweeper = receipt.clusterAnalysis?.isSweeperActive;
   const isTainted = receipt.clusterAnalysis?.hasTaint;
@@ -32,7 +109,7 @@ export default function AgentCopilot({ receipt }: AgentCopilotProps) {
     if (receipt.targetType === "contract") {
       const isProxy = receipt.evidence.some((e) => e.id === "EVIDENCE_CONTRACT_VERIFICATION" && e.status === "warning");
       if (isProxy) {
-        return `🔍 **Verified Proxy Contract:** This contract is verified on BaseScan and uses an upgradeable proxy architecture (e.g. FiatTokenProxy). Standard for institutional tokens, but implementation logic can be updated by governance.`;
+        return `🔍 **Verified Proxy Contract:** This contract is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Standard for institutional tokens, but implementation logic can be updated by governance.`;
       }
       return `✅ **Verified Smart Contract:** Official contract deployment on Base Mainnet with published source metadata and verified deployment provenance.`;
     }
@@ -46,6 +123,11 @@ export default function AgentCopilot({ receipt }: AgentCopilotProps) {
     "How do I revoke allowances?",
   ];
 
+  // Auto-scroll on new message
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatHistory]);
+
   const handleAsk = async (queryText?: string) => {
     const text = queryText || question;
     if (!text.trim() || loading) return;
@@ -55,34 +137,33 @@ export default function AgentCopilot({ receipt }: AgentCopilotProps) {
     setQuestion("");
     setLoading(true);
 
-    // AI Reasoning over deterministic receipt evidence
-    setTimeout(() => {
-      let response = "";
-      const lower = userMessage.toLowerCase();
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMessage,
+          receipt,
+        }),
+      });
 
-      if (lower.includes("safe") || lower.includes("send") || lower.includes("transfer")) {
-        if (isSweeper || isTainted) {
-          response = `🛑 **DO NOT SEND:** Shield detected active malicious activity (${receipt.clusterAnalysis?.clusterTaintName || "Sweeper Bot Trap"}). Interacting with this address will result in irreversible asset loss.`;
-        } else if (receipt.verdict === "CAUTION") {
-          response = `⚠️ **Proceed with Caution:** The address is legitimate but has warning factors (e.g., upgradeable proxy architecture or unverified parameters). Verify exact recipient details before broadcasting.`;
-        } else {
-          response = `✅ **Low Observed Risk:** All ${receipt.coverage.completed} evidence checks passed with clean upstream funding, no sweeper anomalies, and no known drainer signatures. Normal operational precautions apply.`;
-        }
-      } else if (lower.includes("7702") || lower.includes("delegat")) {
-        response = `⚡ **EIP-7702 Overview:** This account contains an EIP-7702 delegation designator (\`0xef0100...\`). When called, it executes the code of its delegate contract within this account's context. This unlocks gas sponsorship (paymasters) and batched transactions without changing the wallet address.`;
-      } else if (lower.includes("approval") || lower.includes("allowance") || lower.includes("revoke")) {
-        if (approvalsCount > 0) {
-          response = `🔓 **Approval Exposure:** Shield found **${approvalsCount} active approvals** (${unlimitedCount} unlimited). While spenders like Uniswap and Permit2 are standard, maintaining unlimited allowances leaves tokens exposed if a dApp is ever compromised. You can reset allowances to \`0\` using revoke.cash or direct \`approve(spender, 0)\`.`;
-        } else {
-          response = `🛡️ **No Open Approvals:** Shield found zero active unrevoked token approvals for this wallet.`;
-        }
+      if (response.ok) {
+        const data = await response.json();
+        setChatHistory((prev) => [...prev, { role: "agent", text: data.reply }]);
       } else {
-        response = `🛡️ **Shield Agent Analysis:** Based on Base block #${Number(receipt.blockNumber).toLocaleString()}, the verdict is **${receipt.verdict}** with **${receipt.coverage.completed}/${receipt.coverage.total} evidence checks completed**. Reference Receipt ID: \`${receipt.receiptId}\`.`;
+        throw new Error("Failed to reach AI Detective.");
       }
-
-      setChatHistory((prev) => [...prev, { role: "agent", text: response }]);
+    } catch (err: any) {
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          text: `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}. Verdict: **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed).`,
+        },
+      ]);
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   };
 
   return (
@@ -101,7 +182,7 @@ export default function AgentCopilot({ receipt }: AgentCopilotProps) {
       <div className="agentSummaryBox">
         <div className="agentIcon">🤖</div>
         <div className="agentText">
-          <p>{defaultSummary}</p>
+          <FormattedMessage text={defaultSummary} />
         </div>
       </div>
 
@@ -109,10 +190,11 @@ export default function AgentCopilot({ receipt }: AgentCopilotProps) {
         <div className="agentChatFeed">
           {chatHistory.map((item, index) => (
             <div key={index} className={`chatBubble bubble-${item.role}`}>
-              <strong>{item.role === "user" ? "You" : "Shield AI"}</strong>
-              <p>{item.text}</p>
+              <strong className="bubbleRole">{item.role === "user" ? "You" : "Shield AI"}</strong>
+              <FormattedMessage text={item.text} />
             </div>
           ))}
+          <div ref={chatEndRef} />
         </div>
       )}
 
