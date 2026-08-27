@@ -1281,6 +1281,41 @@ a { color: inherit; }
   padding: 4px 12px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 82, 255, 0.08);
+  transition: all 0.2s ease;
+}
+.coverageSafe {
+  background: var(--blue-soft) !important;
+  border-color: rgba(0, 82, 255, 0.25) !important;
+}
+.coverageSafe .coverageLargeNumber {
+  color: var(--blue) !important;
+}
+.coverageSafe .coverageSmallLabel {
+  color: var(--blue-strong) !important;
+}
+
+.coverageDanger {
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  box-shadow: 0 2px 12px rgba(225, 29, 72, 0.15) !important;
+}
+.coverageDanger .coverageLargeNumber {
+  color: #e11d48 !important;
+}
+.coverageDanger .coverageSmallLabel {
+  color: #be123c !important;
+}
+
+.coverageCaution {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  box-shadow: 0 2px 12px rgba(217, 119, 6, 0.12) !important;
+}
+.coverageCaution .coverageLargeNumber {
+  color: #d97706 !important;
+}
+.coverageCaution .coverageSmallLabel {
+  color: #b45309 !important;
 }
 .coverageLargeNumber {
   font-size: 19px;

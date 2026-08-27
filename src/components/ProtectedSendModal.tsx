@@ -420,16 +420,28 @@ export default function ProtectedSendModal({
                     ? "🛑 HIGH RISK BLOCKED"
                     : "✅ RECIPIENT VERIFIED"}
                 </span>
-                <div className="preFlightCoverageLarge">
+                <div
+                  className={`preFlightCoverageLarge ${
+                    isBlocked
+                      ? "coverageDanger"
+                      : recipientScan.verdict === "CAUTION"
+                      ? "coverageCaution"
+                      : "coverageSafe"
+                  }`}
+                >
                   <span className="coverageLargeNumber">
-                    {Math.round(
-                      (recipientScan.coverage.completed /
-                        (recipientScan.coverage.total || 1)) *
-                        100
-                    )}%
+                    {isBlocked
+                      ? "0%"
+                      : `${Math.round(
+                          (recipientScan.coverage.completed /
+                            (recipientScan.coverage.total || 1)) *
+                            100
+                        )}%`}
                   </span>
                   <span className="coverageSmallLabel">
-                    {recipientScan.coverage.completed}/{recipientScan.coverage.total} checks verified
+                    {isBlocked
+                      ? "RISK ALERT (BLOCKED)"
+                      : `${recipientScan.coverage.completed}/${recipientScan.coverage.total} checks verified`}
                   </span>
                 </div>
               </div>
