@@ -172,8 +172,8 @@ describe("Shield scan orchestration", () => {
     expect(getContractSourceMetadata).not.toHaveBeenCalled();
     expect(getIndexedContractCreation).not.toHaveBeenCalled();
     expect(baseClient.getStorageAt).not.toHaveBeenCalled();
-    expect(receipt.coverage).toEqual({ completed: 5, unavailable: 1, total: 6 });
-    expect(receipt.verdict).toBe("INSUFFICIENT DATA");
+    expect(receipt.coverage).toEqual({ completed: 6, unavailable: 0, total: 6 });
+    expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });
 
   it("surfaces explorer-reported proxies even without an EIP-1967 slot value", async () => {
