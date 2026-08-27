@@ -61,6 +61,7 @@ export interface ScanCoverage {
 
 export interface ScanReceipt {
   receiptId: string;
+  receiptHash?: string;
   receiptVersion: "0.1";
   riskEngineVersion: "0.1" | "0.2" | "0.3";
   network: "Base Mainnet";

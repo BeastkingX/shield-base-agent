@@ -37,6 +37,34 @@ vi.mock("./approvals", () => ({
   }),
 }));
 
+vi.mock("./cluster-detector", () => ({
+  analyzeClusterTaint: vi.fn().mockResolvedValue({
+    targetAddress: "0x1111111111111111111111111111111111111111",
+    hasTaint: false,
+    taintSeverity: "none",
+    clusterTaintName: null,
+    seedFunder: "None observed",
+    sweepDestination: "None observed",
+    isSweeperActive: false,
+    sweepVelocitySeconds: null,
+    forensicTraceNotes: ["No rapid-forwarding or cluster pattern measured in the sampled history."],
+    moneyTrailGraph: {
+      upstreamFunder: "None observed",
+      funderType: "Clean / Normal Funder",
+      target: "0x1111111111111111111111111111111111111111",
+      downstreamHub: "None observed",
+      hubType: "No outbound forwarding observed",
+    },
+    analysisStatus: "completed",
+    velocitySamples: 0,
+    retainedRatio: null,
+    funderProfile: "No dispenser pattern measured",
+    hubProfile: "No aggregator pattern measured",
+    hop2Funder: null,
+    sampledTransactions: 0,
+  }),
+}));
+
 import { baseClient } from "./base-client";
 import {
   ExplorerUnavailableError,
@@ -85,7 +113,7 @@ describe("Shield scan orchestration", () => {
 
     expect(receipt.targetType).toBe("contract");
     expect(receipt.verdict).toBe("INSUFFICIENT DATA");
-    expect(receipt.coverage).toEqual({ completed: 5, unavailable: 3, total: 8 });
+    expect(receipt.coverage).toEqual({ completed: 6, unavailable: 3, total: 9 });
     expect(indexedItems).toHaveLength(3);
     expect(indexedItems.every((item) => item.status === "unavailable")).toBe(true);
     expect(
@@ -137,7 +165,7 @@ describe("Shield scan orchestration", () => {
     expect(activity?.method).toBe(
       "REST /addresses/{address}/transactions",
     );
-    expect(receipt.coverage).toEqual({ completed: 8, unavailable: 0, total: 8 });
+    expect(receipt.coverage).toEqual({ completed: 9, unavailable: 0, total: 9 });
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });
 
@@ -172,7 +200,7 @@ describe("Shield scan orchestration", () => {
     expect(getContractSourceMetadata).not.toHaveBeenCalled();
     expect(getIndexedContractCreation).not.toHaveBeenCalled();
     expect(baseClient.getStorageAt).not.toHaveBeenCalled();
-    expect(receipt.coverage).toEqual({ completed: 6, unavailable: 0, total: 6 });
+    expect(receipt.coverage).toEqual({ completed: 7, unavailable: 0, total: 7 });
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });
 
@@ -222,12 +250,12 @@ describe("Shield scan orchestration", () => {
       label: "No EIP-1967 implementation found",
     });
     expect(sourceEvidence).toMatchObject({
-      status: "warning",
+      status: "pass",
       label: "Published source verified; proxy reported",
     });
     expect(sourceEvidence?.facts?.["Implementation"]).toBe(
       "0x2222222222222222222222222222222222222222",
     );
-    expect(receipt.verdict).toBe("CAUTION");
+    expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });
 });

@@ -409,7 +409,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             : isVerified
               ? "Published source code verified"
               : "No verified source code published",
-          status: isVerified && !explorerReportsProxy ? "pass" : "warning",
+          status: isVerified ? "pass" : "warning",
           claim: explorerReportsProxy
             ? isVerified
               ? `${source.ContractName || "The contract"} has verified source metadata, and BaseScan reports this address as a proxy.`
@@ -662,7 +662,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           id: "EVIDENCE_ACTIVE_APPROVALS",
           category: "exposure",
           label: `Active approvals audited (${approvalsSummary.totalCount} active, ${approvalsSummary.unlimitedCount} unlimited)`,
-          status: hasHighRiskSpender ? "danger" : approvalsSummary.unlimitedCount > 0 ? "info" : "pass",
+          status: hasHighRiskSpender ? "danger" : approvalsSummary.unlimitedCount >= 5 ? "warning" : approvalsSummary.unlimitedCount > 0 ? "info" : "pass",
           claim: `Shield indexed ${approvalsSummary.totalCount} active token approvals across ${approvalsSummary.uniqueTokensCount} tokens (${approvalsSummary.unlimitedCount} unlimited allowances).`,
           source: "blockscout-approval-index + base-rpc",
           method: "Approval events + allowance probe",
@@ -704,53 +704,118 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     }
   }
 
-  // 2-Hop Money Trail & Sweeper Bot Analysis (if cluster anomaly present)
-  if (clusterAnalysis.hasTaint || clusterAnalysis.isSweeperActive) {
+  // Money Trail & Sweep Velocity — measured on every scan
+  if (clusterAnalysis.analysisStatus === "unavailable") {
+    items.push(
+      evidence(context, {
+        id: "EVIDENCE_MONEY_TRAIL",
+        category: "history",
+        label: "Money-trail analysis unavailable",
+        status: "unavailable",
+        claim:
+          "Indexed transaction history could not be read at scan time; money-trail and sweep-velocity checks did not run.",
+        source: "shield-cluster-traversal",
+        method:
+          "Seed funder + dominant outflow hub + deposit-to-forward delta timing (Blockscout txlist)",
+        rawValue: "unavailable",
+        limitations: [
+          "Explorer downtime prevents flow analysis; this is an explicit gap, not a pass.",
+        ],
+      }),
+    );
+  } else if (clusterAnalysis.isSweeperActive && clusterAnalysis.taintSeverity === "critical") {
+    items.push(
+      evidence(context, {
+        id: "EVIDENCE_SWEEPER_BOT_ANALYSIS",
+        category: "history",
+        label: `Measured rapid-sweep pattern (median ${clusterAnalysis.sweepVelocitySeconds}s)`,
+        status: "danger",
+        claim: `Measured median deposit-to-forward time of ${clusterAnalysis.sweepVelocitySeconds} seconds across ${clusterAnalysis.velocitySamples} deposit(s); seed funder ${clusterAnalysis.seedFunder}; dominant outflow hub ${clusterAnalysis.sweepDestination}.`,
+        source: "shield-velocity-detector",
+        method: "Deposit-to-forward delta timing over indexed history",
+        rawValue: true,
+        facts: {
+          "Median sweep time (s)": clusterAnalysis.sweepVelocitySeconds,
+          "Velocity samples": clusterAnalysis.velocitySamples,
+          "Seed funder": clusterAnalysis.seedFunder,
+          "Funder profile": clusterAnalysis.funderProfile,
+          "Dominant hub": clusterAnalysis.sweepDestination,
+          "Hub profile": clusterAnalysis.hubProfile,
+          "Sampled transactions": clusterAnalysis.sampledTransactions,
+        },
+        limitations: [
+          "Behavioral evidence measures forwarding speed and fund flows; it does not prove key compromise by itself.",
+          "A key leaked with zero on-chain activity cannot be detected until a sweep occurs.",
+        ],
+      }),
+    );
+  } else if (clusterAnalysis.taintSeverity === "critical") {
     items.push(
       evidence(context, {
         id: "EVIDENCE_MONEY_TRAIL_CLUSTER",
         category: "history",
-        label: `Adversarial cluster taint detected (${clusterAnalysis.clusterTaintName})`,
+        label: `Measured laundering-pattern flow (${clusterAnalysis.clusterTaintName})`,
         status: "danger",
-        claim: `Multi-hop traversal connected this address to ${clusterAnalysis.clusterTaintName}. Seed funder: ${clusterAnalysis.seedFunder}.`,
+        claim: `Sampled fund flows connect this address to a measured cluster pattern. Seed funder: ${clusterAnalysis.seedFunder}. Dominant outflow hub: ${clusterAnalysis.sweepDestination}.`,
         source: "shield-cluster-traversal",
-        method: "1-Hop Upstream Funder + 1-Hop Downstream Sweep Hub",
-        rawValue: clusterAnalysis.clusterTaintName || "tainted",
+        method: "1-hop upstream seed funder + 1-hop downstream hub profiling",
+        rawValue: clusterAnalysis.clusterTaintName,
         facts: {
-          "Upstream Funder": clusterAnalysis.moneyTrailGraph.upstreamFunder,
-          "Funder Identity": clusterAnalysis.moneyTrailGraph.funderType,
-          "Downstream Loot Hub": clusterAnalysis.moneyTrailGraph.downstreamHub,
-          "Hub Identity": clusterAnalysis.moneyTrailGraph.hubType,
-          "Cluster Affiliation": clusterAnalysis.clusterTaintName || "None",
+          "Seed funder": clusterAnalysis.seedFunder,
+          "Funder profile": clusterAnalysis.funderProfile,
+          "Dominant hub": clusterAnalysis.sweepDestination,
+          "Hub profile": clusterAnalysis.hubProfile,
+          "Hop-2 funder": clusterAnalysis.hop2Funder ?? "not observed",
         },
         limitations: [
-          "Graph analysis evaluates 1-2 hop deterministic fund flows on Base.",
+          "Analysis covers sampled transaction windows; older history may be out of scope.",
         ],
       }),
     );
-
-    if (clusterAnalysis.isSweeperActive) {
-      items.push(
-        evidence(context, {
-          id: "EVIDENCE_SWEEPER_BOT_ANALYSIS",
-          category: "identity",
-          label: `ACTIVE SWEEPER BOT DETECTED (Drains within ${clusterAnalysis.sweepVelocitySeconds}s)`,
-          status: "danger",
-          claim: `CRITICAL: Deposits to this wallet are automatically drained within ${clusterAnalysis.sweepVelocitySeconds} seconds by an automated sweeper bot.`,
-          source: "shield-velocity-detector",
-          method: "Inter-block deposit-to-sweep delta analysis",
-          rawValue: clusterAnalysis.isSweeperActive,
-          facts: {
-            "Sweeper Bot Active": "YES (CRITICAL HAZARD)",
-            "Sweep Velocity": `${clusterAnalysis.sweepVelocitySeconds} seconds`,
-            "Compromise Risk Level": "HIGH - KEY LIKELY COMPROMISED",
-          },
-          limitations: [
-            "A leaked private key with zero on-chain activity cannot be detected until an interaction or sweep occurs.",
-          ],
-        }),
-      );
-    }
+  } else if (clusterAnalysis.taintSeverity === "warning") {
+    items.push(
+      evidence(context, {
+        id: "EVIDENCE_MONEY_TRAIL_CLUSTER",
+        category: "history",
+        label: "Automated forwarding measured (unattributed)",
+        status: "warning",
+        claim: `Deposits are forwarded quickly (median ${clusterAnalysis.sweepVelocitySeconds}s over ${clusterAnalysis.velocitySamples} sample(s)), but no dispenser-funder or aggregation-hub pattern was measured. Legitimate services (e.g. exchange deposit wallets) can show the same shape.`,
+        source: "shield-velocity-detector",
+        method: "Deposit-to-forward delta timing over indexed history",
+        rawValue: clusterAnalysis.sweepVelocitySeconds,
+        facts: {
+          "Median forward time (s)": clusterAnalysis.sweepVelocitySeconds,
+          "Samples": clusterAnalysis.velocitySamples,
+          "Top outflow destination": clusterAnalysis.sweepDestination,
+        },
+        limitations: [
+          "Fast forwarding alone does not prove malicious intent.",
+        ],
+      }),
+    );
+  } else {
+    items.push(
+      evidence(context, {
+        id: "EVIDENCE_MONEY_TRAIL",
+        category: "history",
+        label: "Money-trail analysis completed — no rapid-forwarding pattern measured",
+        status: "pass",
+        claim: `Shield sampled ${clusterAnalysis.sampledTransactions} transaction(s), identified the seed funder (${clusterAnalysis.seedFunder}), and measured deposit-to-forward timing. No sweeper or cluster pattern was detected in the sampled history.`,
+        source: "shield-cluster-traversal",
+        method: "1-hop upstream + 1-hop downstream + delta timing (Blockscout txlist)",
+        rawValue: "no-pattern-measured",
+        facts: {
+          "Seed funder": clusterAnalysis.seedFunder,
+          "Funder profile": clusterAnalysis.funderProfile,
+          "Top outflow destination": clusterAnalysis.sweepDestination,
+          "Velocity samples": clusterAnalysis.velocitySamples,
+          "Sampled transactions": clusterAnalysis.sampledTransactions,
+        },
+        limitations: [
+          "A threat with no on-chain history cannot be detected by flow analysis.",
+        ],
+      }),
+    );
   }
 
   const risk = evaluateRisk(targetType, items);
@@ -781,8 +846,13 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     approvalsSummary,
   };
 
+  const receiptHash = `0x${createHash("sha256")
+    .update(JSON.stringify(receiptWithoutId))
+    .digest("hex")}`;
+
   return {
     receiptId: createReceiptId(receiptWithoutId),
+    receiptHash,
     ...receiptWithoutId,
   };
 }

@@ -394,10 +394,10 @@ export default function ProtectedSendModal({
             </button>
             <button
               type="button"
-              className="presetBtn dangerPreset"
-              onClick={() => setRecipient("0x7777777777777777777777777777777777777bad")}
+              className="presetBtn"
+              onClick={() => setRecipient("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")}
             >
-              Sweeper Trap (Risk)
+              USDC Contract (Proxy)
             </button>
           </div>
 

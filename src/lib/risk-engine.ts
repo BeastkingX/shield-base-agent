@@ -38,13 +38,13 @@ export function evaluateRisk(
     rules.push({
       id: "RULE_COMPROMISED_SWEEPER_DETECTED",
       effect: "high-risk",
-      explanation: "Wallet exhibits rapid automated sweep behavior (<30s). Private key is likely compromised.",
+      explanation: "Measured median deposit-to-forward time under 30 seconds across multiple deposits — behavior consistent with an automated sweeper draining a compromised key.",
       evidenceIds: [sweeperEvidence.id],
     });
 
     return {
       verdict: "HIGH OBSERVED RISK",
-      summary: "DO NOT SEND FUNDS: This recipient has an active SWEEPER BOT. Any gas or tokens sent here will be stolen within seconds.",
+      summary: "DO NOT SEND FUNDS: Shield measured automated instant forwarding on this address (see evidence). Deposits are likely to be drained.",
       rules,
     };
   }
@@ -55,13 +55,13 @@ export function evaluateRisk(
     rules.push({
       id: "RULE_CRITICAL_DRAINER_DETECTED",
       effect: "high-risk",
-      explanation: "Target address or its seed gas funder matches known malicious drainer signatures or cluster hubs.",
+      explanation: "Measured fund-flow pattern: suspicious seed-funding behavior and consolidation-hub outflows with near-total value forwarding.",
       evidenceIds: [clusterEvidence.id],
     });
 
     return {
       verdict: "HIGH OBSERVED RISK",
-      summary: "Shield found a direct link to known phishing drainer infrastructure. Do not interact.",
+      summary: "Shield measured a laundering-style fund-flow pattern involving this address. Do not interact.",
       rules,
     };
   }

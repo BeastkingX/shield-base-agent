@@ -260,12 +260,12 @@ export default function Home() {
               className="textButton"
               type="button"
               onClick={() => {
-                const addr = "0x7777777777777777777777777777777777777bad";
+                const addr = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
                 setAddress(addr);
                 runScan(addr);
               }}
             >
-              Try Sweeper Bot Trap <span>→</span>
+              Try USDC (Proxy Check) <span>→</span>
             </button>
             <span>·</span>
             <span>Read-only · Never signs or sends</span>
