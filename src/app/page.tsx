@@ -42,24 +42,20 @@ interface Health {
   };
 }
 
-function statusIconClass(status: EvidenceItem["status"]): string {
-  if (status === "pass") return "ok";
-  if (status === "warning") return "warn";
-  if (status === "danger") return "danger";
-  if (status === "info") return "infoo";
-  return "unavail";
+function statusRowClass(status: EvidenceItem["status"]): string {
+  if (status === "danger") return "row-danger";
+  if (status === "warning") return "row-warn";
+  if (status === "pass") return "row-ok";
+  if (status === "info") return "row-info";
+  return "row-unav";
 }
 
-function statusGlyph(status: EvidenceItem["status"]): string {
-  if (status === "pass") return "✓";
-  if (status === "warning") return "⚠️";
-  if (status === "danger") return "✕";
-  if (status === "info") return "ⓘ";
-  return "•";
-}
-
-function categoryLabel(category: EvidenceCategory): string {
-  return FILTERS.find((filter) => filter.id === category)?.label || category;
+function statusWord(status: EvidenceItem["status"]): string {
+  if (status === "danger") return "Danger";
+  if (status === "warning") return "Review";
+  if (status === "pass") return "Clean";
+  if (status === "info") return "Noted";
+  return "Gap";
 }
 
 function displayFact(value: EvidenceFactValue): string {
@@ -110,10 +106,33 @@ export default function Home() {
     localStorage.setItem("shield-theme", nextTheme);
   };
 
+  // Deterministic severity sorting: danger -> warning -> pass -> info -> unavailable
+  const sortedEvidence = useMemo(() => {
+    if (!receipt) return [];
+    const order: Record<EvidenceItem["status"], number> = {
+      danger: 0,
+      warning: 1,
+      pass: 2,
+      info: 3,
+      unavailable: 4,
+    };
+    return [...receipt.evidence].sort((a, b) => order[a.status] - order[b.status]);
+  }, [receipt]);
+
   const filteredEvidence = useMemo(() => {
-    if (!receipt || filter === "all") return receipt?.evidence || [];
-    return receipt.evidence.filter((item) => item.category === filter);
-  }, [receipt, filter]);
+    if (filter === "all") return sortedEvidence;
+    return sortedEvidence.filter((item) => item.category === filter);
+  }, [sortedEvidence, filter]);
+
+  // Flagship finding: top danger or top warning finding
+  const flagshipFinding = useMemo(() => {
+    if (!receipt) return null;
+    const topDanger = receipt.evidence.find((e) => e.status === "danger");
+    if (topDanger) return topDanger;
+    const topWarning = receipt.evidence.find((e) => e.status === "warning");
+    if (topWarning) return topWarning;
+    return null;
+  }, [receipt]);
 
   const runScan = useCallback(async (target: string) => {
     setScanStage(0);
@@ -194,9 +213,12 @@ export default function Home() {
     "Apply deterministic rules",
   ];
 
-  const warningCount =
-    receipt?.evidence.filter((e) => e.status === "warning" || e.status === "danger").length || 0;
+  const dangerCount = receipt?.evidence.filter((e) => e.status === "danger").length || 0;
+  const warningCount = receipt?.evidence.filter((e) => e.status === "warning").length || 0;
+  const passCount = receipt?.evidence.filter((e) => e.status === "pass").length || 0;
+  const infoCount = receipt?.evidence.filter((e) => e.status === "info").length || 0;
   const unavailableCount = receipt?.coverage.unavailable || 0;
+
   const sweepVelocity = (() => {
     const s = receipt?.clusterAnalysis?.sweepVelocitySeconds;
     if (typeof s === "number") {
@@ -217,7 +239,7 @@ export default function Home() {
       </div>
 
       <div className="wrap">
-        {/* Navigation (Mockup Exact) */}
+        {/* Navigation */}
         <nav aria-label="Primary navigation">
           <a className="brand" href="#top" aria-label="Shield home">
             <span className="mark">🛡</span>
@@ -247,12 +269,12 @@ export default function Home() {
             </Link>
             <span className="navpill">
               <span className={`livedot ${health?.ok ? "" : "offline"}`} aria-hidden="true" />
-              Base · {health?.blockNumber ? Number(health.blockNumber).toLocaleString() : "50,548,200"}
+              Base · {health?.blockNumber ? Number(health.blockNumber).toLocaleString() : "50,551,087"}
             </span>
           </div>
         </nav>
 
-        {/* Hero Section (Mockup Exact) */}
+        {/* Hero Section */}
         <header className={`hero ${receipt ? "heroCompact" : ""}`} id="top">
           <span className="eyebrow">⚡ Evidence-first security on Base</span>
           <h1>
@@ -372,7 +394,7 @@ export default function Home() {
         {/* Education Carousel */}
         <AiEducationCarousel onSelectQuestion={handleSelectEducationQuestion} />
 
-        {/* Scan Result Verdict Banner & Evidence Trail (Mockup Exact) */}
+        {/* Scan Result Verdict Banner & Evidence Trail */}
         {receipt && (
           <main id="main-content">
             <section
@@ -462,7 +484,7 @@ export default function Home() {
                   <div className="l">fastest measured outflow</div>
                 </div>
                 <div className="stat">
-                  <div className="n">{warningCount}</div>
+                  <div className="n">{dangerCount + warningCount}</div>
                   <div className="l">warnings fired</div>
                 </div>
                 <div className="stat">
@@ -507,56 +529,113 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Evidence Trail (Mockup Exact) */}
+            {/* Evidence Trail (Decluttered Trophy Case with Flagship Finding) */}
             <section className="evi" aria-label="Evidence trail">
-              <h3>Evidence trail · tap any row for full facts</h3>
+              <h2>Evidence trail</h2>
+              <p className="sub">
+                measured at block #{Number(receipt.blockNumber).toLocaleString()} · receipt {receipt.receiptId.slice(0, 16)}…
+              </p>
 
+              {/* 1. Severity Summary Bar */}
+              <div className="summarybar" role="status" aria-label="Evidence summary counts">
+                <span className="sev">
+                  <span className="pip red" aria-hidden="true" />
+                  <b>{dangerCount}</b> danger
+                </span>
+                <span className="sev">
+                  <span className="pip amber" aria-hidden="true" />
+                  <b>{warningCount}</b> review
+                </span>
+                <span className="sev">
+                  <span className="pip green" aria-hidden="true" />
+                  <b>{passCount}</b> clean
+                </span>
+                <span className="sev">
+                  <span className="pip blue" aria-hidden="true" />
+                  <b>{infoCount}</b> noted
+                </span>
+                {unavailableCount > 0 && (
+                  <span className="sev">
+                    <span className="pip gray" aria-hidden="true" />
+                    <b>{unavailableCount}</b> gaps
+                  </span>
+                )}
+                <span className="cover">
+                  {receipt.coverage.completed}/{receipt.coverage.total} checks
+                </span>
+              </div>
+
+              {/* 2. Flagship Finding Card (Tinted Hero Card for Top Warning/Danger) */}
+              {flagshipFinding && (
+                <div
+                  className={`herofind ${flagshipFinding.status === "danger" ? "danger" : ""}`}
+                >
+                  <div className="kicker">⚑ Why this verdict</div>
+                  <div className="title">{flagshipFinding.claim}</div>
+                  {flagshipFinding.facts && Object.keys(flagshipFinding.facts).length > 0 && (
+                    <div className="detail">
+                      {Object.entries(flagshipFinding.facts)
+                        .slice(0, 3)
+                        .map(([k, v]) => `${k}: ${String(v)}`)
+                        .join(" · ")}
+                    </div>
+                  )}
+                  <span className="idtag">{flagshipFinding.id}</span>
+                </div>
+              )}
+
+              {/* 3. One-Line Rows for Evidence Checks */}
               {filteredEvidence.map((item) => (
-                <details key={item.id} className="evidenceCard">
-                  <summary>
-                    <div className={`eicon ${statusIconClass(item.status)}`}>
-                      {statusGlyph(item.status)}
-                    </div>
-                    <div>
-                      <div className="t">{item.label}</div>
-                      <div className="d">{item.claim}</div>
-                    </div>
-                    <span className="etag">{item.category}</span>
-                    <span className="chevron" aria-hidden="true">⌄</span>
+                <details key={item.id}>
+                  <summary className={`evidenceRow ${statusRowClass(item.status)}`}>
+                    <span className="sw">{statusWord(item.status)}</span>
+                    <span className="claim">{item.claim}</span>
+                    <span className="chev" aria-hidden="true">⌄</span>
                   </summary>
 
-                  <div className="evidenceBody">
+                  <div className="expanded">
                     {item.facts && Object.keys(item.facts).length > 0 && (
-                      <div className="factsGrid">
+                      <>
                         {Object.entries(item.facts).map(([k, v]) => (
-                          <div key={k} className="factItem">
-                            <span className="factLabel">{k}</span>
-                            <strong className="factValue">{displayFact(v)}</strong>
+                          <div key={k} className="factrow">
+                            <span className="k">{k}</span>
+                            <span className="v">{displayFact(v)}</span>
                           </div>
                         ))}
+                      </>
+                    )}
+
+                    <div className="factrow">
+                      <span className="k">Source</span>
+                      <span className="v">{item.source} · {item.method}</span>
+                    </div>
+                    <div className="factrow">
+                      <span className="k">Evidence ID</span>
+                      <span className="v">{item.id}</span>
+                    </div>
+                    <div className="factrow">
+                      <span className="k">Block</span>
+                      <span className="v">#{Number(item.blockNumber).toLocaleString()}</span>
+                    </div>
+
+                    {item.referenceUrl && (
+                      <div className="factrow">
+                        <span className="k">Reference</span>
+                        <a
+                          href={item.referenceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="v"
+                          style={{ color: "var(--blue-hi)", fontWeight: 700 }}
+                        >
+                          Inspect source ↗
+                        </a>
                       </div>
                     )}
 
-                    <div className="technicalRow">
-                      <div>
-                        <span>Source:</span> <code>{item.source} · {item.method}</code>
-                      </div>
-                      <div>
-                        <span>ID:</span> <code>{item.id}</code>
-                      </div>
-                      <div>
-                        <span>Block:</span> <code>#{Number(item.blockNumber).toLocaleString()}</code>
-                      </div>
-                      {item.referenceUrl && (
-                        <a href={item.referenceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", fontWeight: 700 }}>
-                          Inspect source ↗
-                        </a>
-                      )}
-                    </div>
-
                     {item.limitations.length > 0 && (
                       <div className="limitations">
-                        <strong>Limitations:</strong>
+                        <strong>Limitations</strong>
                         <ul>
                           {item.limitations.map((lim, idx) => (
                             <li key={idx}>{lim}</li>
@@ -567,6 +646,10 @@ export default function Home() {
                   </div>
                 </details>
               ))}
+
+              <p className="hintline">
+                One line per check. Rail color signals severity, label states findings explicitly. Expand any check for raw on-chain facts and verification sources.
+              </p>
             </section>
           </main>
         )}
@@ -680,7 +763,7 @@ export default function Home() {
         </footer>
       </div>
 
-      {/* Floating Chat Dock Launcher (Mockup Exact) */}
+      {/* Floating Chat Dock Launcher */}
       <div className="dock">
         <span className="docknote">grounded in the receipt (never guesses)</span>
         <button
@@ -703,7 +786,7 @@ export default function Home() {
         onClearInitialQuestion={() => setSelectedQuestion("")}
       />
 
-      {/* Persistent Theme Toggle Button (Mockup Exact) */}
+      {/* Persistent Theme Toggle Button */}
       <button
         className="themeToggle"
         type="button"

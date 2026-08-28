@@ -1,11 +1,13 @@
 /* ==========================================================================
-   SHIELD DESIGN SYSTEM, Token-for-Token Implementation of Reference Mockup
+   SHIELD DESIGN SYSTEM, Evidence AI Agent Design Architecture
+   Typography Stack: Space Grotesk (Headings), Inter (Body), Geist Mono (Data)
    ========================================================================== */
 
 :root {
   --radius: 18px;
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  --font-body: var(--font-body), Inter, system-ui, sans-serif;
+  --font-mono: var(--font-mono), "Geist Mono", ui-monospace, Menlo, monospace;
 
   /* Light Theme (Default fallback & [data-theme="light"]) */
   --bg: #f5f8ff;
@@ -40,7 +42,7 @@ html[data-theme="dark"],
   --line: rgba(148, 163, 184, 0.14);
   --line-strong: rgba(148, 163, 184, 0.28);
   --ink: #e9eef8;
-  --muted: #94a3b8;
+  --muted: #8b98b4;
   --faint: #8b98b4;
   --blue: #3b82f6;
   --blue-hi: #60a5fa;
@@ -58,7 +60,7 @@ html[data-theme="dark"],
 }
 
 /* ==========================================================================
-   Global Reset & Base
+   Global Reset & Base Typography
    ========================================================================== */
 
 * {
@@ -72,13 +74,21 @@ html {
 }
 
 body {
-  font-family: var(--font);
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--ink);
   min-height: 100vh;
   transition: background 0.35s ease, color 0.35s ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+h1, h2, h3, .brand, .vword, .herofind .title {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  font-weight: 700;
 }
 
 button, input, select, textarea {
@@ -94,8 +104,8 @@ a {
   text-decoration: none;
 }
 
-code {
-  font-family: var(--mono);
+code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow .v, .navpill, .etag, .versionTag {
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -146,7 +156,7 @@ code {
 }
 
 /* ==========================================================================
-   Navigation (Mockup-Exact)
+   Navigation
    ========================================================================== */
 
 nav {
@@ -201,7 +211,7 @@ nav {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   transition: all 0.15s ease;
   display: inline-flex;
   align-items: center;
@@ -231,7 +241,6 @@ nav {
   background: var(--card);
   border-radius: 999px;
   padding: 8px 13px;
-  font-family: var(--mono);
   min-height: 38px;
 }
 
@@ -248,35 +257,8 @@ nav {
   50% { opacity: 0.4; }
 }
 
-.mobileMenuBtn {
-  display: none;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 18px;
-  cursor: pointer;
-}
-
-.mobileNavDrawer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--card-solid);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  margin-bottom: 16px;
-}
-.mobileNavLink {
-  padding: 8px 12px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
 /* ==========================================================================
-   Hero & Scan Panel (Mockup-Exact)
+   Hero & Scan Panel
    ========================================================================== */
 
 .hero {
@@ -300,6 +282,7 @@ nav {
   background: var(--card);
   padding: 7px 14px;
   border-radius: 999px;
+  font-family: var(--font-mono);
 }
 
 h1 {
@@ -356,7 +339,6 @@ h1 em {
   box-shadow: 0 0 0 4px var(--blueglow);
 }
 .field .glyph {
-  font-family: var(--mono);
   color: var(--faint);
   font-size: 14px;
 }
@@ -368,11 +350,10 @@ h1 em {
   color: var(--ink);
   font-size: 15px;
   padding: 17px 0;
-  font-family: var(--mono);
 }
 .field input::placeholder {
   color: var(--faint);
-  font-family: var(--font);
+  font-family: var(--font-body);
 }
 
 .cta {
@@ -384,7 +365,7 @@ h1 em {
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   box-shadow: 0 10px 26px var(--blueglow);
   min-height: 54px;
   display: inline-flex;
@@ -418,7 +399,7 @@ h1 em {
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   transition: 0.2s;
   min-height: 44px;
   display: inline-flex;
@@ -451,7 +432,7 @@ h1 em {
   padding: 8px 14px;
   font-size: 13.5px;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   transition: all 0.15s;
   min-height: 38px;
   display: inline-flex;
@@ -464,7 +445,6 @@ h1 em {
   background: var(--bg2);
 }
 
-/* Connected wallet box inside scan panel */
 .walletConnectedContainer {
   margin-top: 16px;
   padding: 12px 16px;
@@ -509,7 +489,7 @@ h1 em {
 }
 
 /* ==========================================================================
-   Verdict Banner (Photographable Artifact, Mockup-Exact)
+   Verdict Banner (Photographable Artifact)
    ========================================================================== */
 
 .verdict {
@@ -568,7 +548,6 @@ h1 em {
   flex-shrink: 0;
 }
 .vmeta {
-  font-family: var(--mono);
   font-size: 12px;
   color: var(--faint);
   margin-top: 6px;
@@ -584,11 +563,11 @@ h1 em {
   font-size: 26px;
   font-weight: 800;
   color: var(--ink);
-  font-family: var(--mono);
 }
 .stat .n small {
   font-size: 15px;
   color: var(--muted);
+  font-family: var(--font-body);
 }
 .stat .l {
   font-size: 11px;
@@ -596,6 +575,7 @@ h1 em {
   text-transform: uppercase;
   color: var(--faint);
   margin-top: 2px;
+  font-family: var(--font-mono);
 }
 
 .vsum {
@@ -616,9 +596,9 @@ h1 em {
 .fired .lbl {
   font-size: 12px;
   color: var(--faint);
+  font-family: var(--font-mono);
 }
 .rulechip {
-  font-family: var(--mono);
   font-size: 11.5px;
   color: var(--amber);
   background: var(--amberbg);
@@ -649,7 +629,6 @@ h1 em {
   padding: 13px 15px;
 }
 .verify .h {
-  font-family: var(--mono);
   font-size: 12.5px;
   color: var(--green);
   font-weight: 700;
@@ -668,7 +647,7 @@ h1 em {
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   transition: all 0.15s;
 }
 .verifybtn:hover {
@@ -677,171 +656,238 @@ h1 em {
 }
 
 /* ==========================================================================
-   Evidence Trail (Mockup-Exact)
+   Evidence Trail (Decluttered Trophy Case, Demo Architecture)
    ========================================================================== */
 
 .evi {
   margin-top: 26px;
 }
-.evi h3 {
+.evi h2 {
+  font-size: 22px;
+  margin-bottom: 4px;
+}
+.evi .sub {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin-bottom: 24px;
+}
+
+/* 1. Severity Summary Bar */
+.summarybar {
+  display: flex;
+  gap: 20px;
+  align-items: center;
   font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.sev {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sev b {
+  color: var(--ink);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.pip.red { background: var(--red); }
+.pip.amber { background: var(--amber); }
+.pip.green { background: var(--green); }
+.pip.blue { background: var(--blue-hi); }
+.pip.gray { background: var(--faint); }
+.cover {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
+/* 2. Flagship Finding Card */
+.herofind {
+  border-radius: 16px;
+  border: 1.5px solid rgba(251, 191, 36, 0.35);
+  background: linear-gradient(135deg, var(--card), var(--amberbg));
+  padding: 20px 20px 16px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow);
+}
+.herofind.danger {
+  border-color: rgba(251, 75, 99, 0.35);
+  background: linear-gradient(135deg, var(--card), var(--redbg));
+}
+.herofind .kicker {
+  font-size: 10.5px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--faint);
-  margin: 0 4px 12px;
+  color: var(--amber);
+  font-weight: 800;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
 }
-
-.erow {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 14px;
-  align-items: center;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px 18px;
-  margin-bottom: 9px;
-  box-shadow: var(--shadow);
-  transition: border-color 0.15s;
+.herofind.danger .kicker {
+  color: var(--red);
 }
-.erow:hover {
-  border-color: var(--line-strong);
-}
-
-.eicon {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  display: grid;
-  place-items: center;
-  font-size: 15px;
-  flex-shrink: 0;
-}
-.eicon.warn { background: var(--amberbg); color: var(--amber); }
-.eicon.ok { background: var(--greenbg); color: var(--green); }
-.eicon.infoo { background: var(--blueglow); color: var(--blue-hi); }
-.eicon.danger { background: var(--redbg); color: var(--red); }
-.eicon.unavail { background: var(--bg2); color: var(--faint); }
-
-.erow .t {
-  font-size: 14.5px;
-  font-weight: 650;
+.herofind .title {
+  font-size: 17.5px;
+  font-weight: 700;
+  line-height: 1.35;
   color: var(--ink);
 }
-.erow .d {
+.herofind .detail {
   font-size: 12.5px;
   color: var(--muted);
-  margin-top: 2px;
-  font-family: var(--mono);
+  margin-top: 8px;
 }
-.etag {
+.herofind .idtag {
+  display: inline-block;
+  margin-top: 12px;
   font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 10px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--amber);
+  border-radius: 7px;
+  padding: 4px 8px;
+}
+.herofind.danger .idtag {
+  border-color: rgba(251, 75, 99, 0.35);
+  color: var(--red);
 }
 
-/* Expandable summary & body */
-.evidenceCard {
+/* 3. One-Line Rows (Declutter Rule: rail + status + claim + chevron only) */
+.evidenceRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  margin-bottom: 9px;
-  overflow: hidden;
-  box-shadow: var(--shadow);
-}
-.evidenceCard summary {
-  padding: 14px 18px;
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  gap: 14px;
-  align-items: center;
+  border-radius: 12px;
+  padding: 15px 16px 15px 20px;
+  margin-bottom: 10px;
   cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
   list-style: none;
+  user-select: none;
 }
-.evidenceCard summary::-webkit-details-marker { display: none; }
-.chevron {
+.evidenceRow::-webkit-details-marker { display: none; }
+.evidenceRow:hover {
+  transform: translateY(-1px);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+.evidenceRow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 3px;
+}
+.row-warn::before { background: var(--amber); }
+.row-danger::before { background: var(--red); }
+.row-ok::before { background: var(--green); }
+.row-info::before { background: var(--blue-hi); }
+.row-unav::before { background: repeating-linear-gradient(var(--faint) 0 3px, transparent 3px 6px); }
+.row-unav { opacity: 0.68; }
+
+.sw {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  min-width: 58px;
+}
+.row-warn .sw { color: var(--amber); }
+.row-danger .sw { color: var(--red); }
+.row-ok .sw { color: var(--green); }
+.row-info .sw { color: var(--blue-hi); }
+.row-unav .sw { color: var(--faint); }
+
+.claim {
+  font-size: 14.5px;
+  font-weight: 600;
+  flex: 1;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.chev {
   color: var(--faint);
-  font-size: 16px;
-  font-weight: 900;
-  transition: transform 0.2s ease;
+  font-size: 13px;
+  transition: transform 0.2s;
 }
-details[open] .chevron {
+.evidenceRow:hover .chev { color: var(--ink); }
+details[open] > summary .chev {
   transform: rotate(180deg);
 }
-.evidenceBody {
-  padding: 0 18px 18px;
-  border-top: 1px solid var(--line);
+
+/* Expanded Two-Column Facts View */
+.expanded {
+  margin: -6px 0 12px;
+  padding: 14px 18px 16px 20px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--card);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
+  box-shadow: var(--shadow);
 }
-.factsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+.factrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
 }
-.factItem {
+.factrow:last-child {
+  border-bottom: 0;
+}
+.factrow .k {
+  color: var(--faint);
+}
+.factrow .v {
+  color: var(--muted);
+  text-align: right;
+}
+
+.limitations {
   background: var(--bg2);
   padding: 10px 14px;
   border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.factLabel {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  font-weight: 750;
-}
-.factValue {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--ink);
-  font-family: var(--mono);
-}
-.technicalRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: center;
-  font-size: 11.5px;
-  color: var(--muted);
-  padding-top: 6px;
-}
-.technicalRow code {
-  color: var(--ink);
-  background: var(--bg2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 4px;
-}
-.limitations {
-  background: var(--bg2);
-  padding: 12px 16px;
-  border-radius: 10px;
   font-size: 12px;
+  margin-top: 4px;
 }
 .limitations strong {
   display: block;
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--faint);
   margin-bottom: 4px;
+  font-family: var(--font-mono);
 }
 .limitations ul {
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
 }
+.hintline {
+  margin-top: 24px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
 
 /* ==========================================================================
-   Floating Chat Dock (Mockup-Exact)
+   Floating Chat Dock
    ========================================================================== */
 
 .dock {
@@ -866,7 +912,7 @@ details[open] .chevron {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   box-shadow: 0 14px 34px var(--blueglow);
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -879,7 +925,6 @@ details[open] .chevron {
   color: var(--faint);
 }
 
-/* Persistent Theme Toggle (Mockup-Exact) */
 .themeToggle {
   position: fixed;
   left: 22px;
@@ -892,7 +937,7 @@ details[open] .chevron {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  font-family: var(--font);
+  font-family: var(--font-body);
   box-shadow: var(--shadow);
   z-index: 900;
   transition: all 0.15s ease;
@@ -903,7 +948,6 @@ details[open] .chevron {
   transform: translateY(-1px);
 }
 
-/* Floating Drawer Panel */
 .dockBackdrop {
   position: fixed;
   inset: 0;
@@ -1022,7 +1066,6 @@ details[open] .chevron {
   font-weight: 800;
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: var(--mono);
 }
 .verdictTag-low-observed-risk { background: var(--greenbg); color: var(--green); }
 .verdictTag-caution { background: var(--amberbg); color: var(--amber); }
@@ -1148,7 +1191,7 @@ details[open] .chevron {
   border: 1px solid var(--line);
   color: var(--ink);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 750;
   padding: 5px 10px;
   border-radius: 99px;
   cursor: pointer;
@@ -1210,7 +1253,6 @@ details[open] .chevron {
 .bulletText { flex: 1; }
 .boldText { font-weight: 850; color: var(--ink); }
 .inlineCode {
-  font-family: var(--mono);
   font-size: 11.5px;
   background: rgba(0, 0, 0, 0.08);
   padding: 1px 4px;
@@ -1278,6 +1320,7 @@ details[open] .chevron {
   font-weight: 800;
   text-transform: uppercase;
   color: var(--muted);
+  font-family: var(--font-mono);
 }
 .demoButtonsGroup {
   display: flex;
@@ -1304,7 +1347,7 @@ details[open] .chevron {
   border: 1.5px solid var(--line);
   border-radius: 14px;
   padding: 14px 18px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--ink);
   outline: none;
@@ -1379,6 +1422,7 @@ details[open] .chevron {
   font-size: 11.5px;
   text-transform: uppercase;
   color: var(--muted);
+  font-family: var(--font-mono);
 }
 .checkCardRow {
   background: var(--card-solid);
@@ -1405,7 +1449,6 @@ details[open] .chevron {
   margin: 4px 0 0;
   font-size: 11.5px;
   color: var(--muted);
-  font-family: var(--mono);
 }
 .hashReceiptFooter {
   display: flex;
@@ -1414,7 +1457,6 @@ details[open] .chevron {
   padding-top: 10px;
   border-top: 1px solid var(--line);
   font-size: 11px;
-  font-family: var(--mono);
   color: var(--muted);
   flex-wrap: wrap;
 }
@@ -1626,7 +1668,6 @@ details[open] .chevron {
   box-shadow: var(--shadow);
 }
 .stepNum {
-  font-family: var(--mono);
   font-size: 12px;
   font-weight: 850;
   color: var(--blue-hi);
@@ -1733,7 +1774,6 @@ details[open] .chevron {
   color: var(--blue-hi);
 }
 .versionTag {
-  font-family: var(--mono);
   font-size: 11.5px;
   font-weight: 750;
   color: var(--faint);
@@ -1824,7 +1864,7 @@ details[open] .chevron {
   border: 1.5px solid var(--line);
   border-radius: 14px;
   padding: 14px 18px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink);
   outline: none;
@@ -1928,7 +1968,6 @@ details[open] .chevron {
 }
 .hashValue {
   font-size: 11.5px;
-  font-family: var(--mono);
   color: var(--ink);
   background: var(--bg2);
   padding: 6px 10px;
@@ -1999,25 +2038,101 @@ details[open] .chevron {
 }
 
 /* ==========================================================================
-   Breakpoints
+   Explicit Mobile & Tablet Breakpoints (960px & 640px)
    ========================================================================== */
 
+/* 1. Tablet & Mid-Width Breakpoint (≤960px) */
 @media (max-width: 960px) {
-  .statrow { gap: 20px; }
-  .steps { grid-template-columns: repeat(2, 1fr); }
-  .verifyMethodSteps { grid-template-columns: 1fr; }
-  .hashComparisonGrid { grid-template-columns: 1fr; }
+  .statrow {
+    gap: 20px;
+  }
+  .steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .verifyMethodSteps {
+    grid-template-columns: 1fr;
+  }
+  .hashComparisonGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
+/* 2. Phone / Small Screen Breakpoint (≤640px) */
 @media (max-width: 640px) {
-  .canvas { padding: 0 12px 40px; }
-  .panelrow { flex-direction: column; }
-  .cta { width: 100%; }
-  nav { padding: 16px 4px; }
-  .desktopOnly { display: none !important; }
-  .mobileOnly { display: inline-flex !important; }
-  .statrow { flex-direction: column; gap: 14px; }
-  .steps { grid-template-columns: 1fr; }
+  .canvas {
+    padding: 0 12px 40px;
+  }
+  .panelrow {
+    flex-direction: column;
+  }
+  .cta {
+    width: 100%;
+  }
+  nav {
+    padding: 14px 2px;
+    gap: 8px;
+  }
+  .navlinks {
+    gap: 6px;
+  }
+  .navbtn {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 34px;
+  }
+  .navpill {
+    padding: 6px 10px;
+    font-size: 11px;
+    min-height: 34px;
+  }
+  .statrow {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .summarybar {
+    gap: 10px;
+    font-size: 12px;
+  }
+  .cover {
+    margin-left: 0;
+    width: 100%;
+  }
+  .herofind {
+    padding: 16px 14px;
+  }
+  .herofind .title {
+    font-size: 15.5px;
+  }
+  .herofind .detail {
+    font-size: 11.5px;
+  }
+  .evidenceRow {
+    padding: 12px 12px 12px 16px;
+    gap: 8px;
+  }
+  .evidenceRow .sw {
+    min-width: 50px;
+    font-size: 9px;
+  }
+  .evidenceRow .claim {
+    font-size: 13px;
+  }
+  .expanded {
+    padding: 12px 14px;
+  }
+  .factrow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 0;
+  }
+  .factrow .v {
+    text-align: left;
+    font-size: 12px;
+  }
   .floatingDockDrawer {
     width: 100vw;
     height: 90vh;
@@ -2027,7 +2142,24 @@ details[open] .chevron {
     border-left: none;
     border-top: 1px solid var(--line-strong);
   }
+  .dockbtn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+  .docknote {
+    display: none;
+  }
+  .themeToggle {
+    left: 12px;
+    bottom: 16px;
+    padding: 8px 12px;
+    font-size: 11.5px;
+  }
 }
+
+/* ==========================================================================
+   Prefers Reduced Motion (A11y Requirement)
+   ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto !important; }
