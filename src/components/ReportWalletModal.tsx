@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { isAddress } from "viem";
 
 interface ReportWalletModalProps {
@@ -10,54 +10,42 @@ interface ReportWalletModalProps {
   reporterAddress?: string | null;
 }
 
-const REPORT_TEMPLATES = [
+const SCAM_TEMPLATES = [
   {
-    id: "phishing",
+    id: "drainer",
     icon: "🚨",
-    label: "Phishing Drainer / Fake Airdrop",
-    category: "Phishing / Drainer",
-    defaultTitle: "Phishing permit drainer signature detected",
-    defaultDesc: "This wallet or contract requested unlimited Permit2 or ERC-20 approvals on a phishing website to drain user assets.",
+    label: "Permit / Sweeper Drainer",
+    desc: "Malicious contract draining tokens or ETH immediately upon deposit.",
   },
   {
-    id: "sweeper",
-    icon: "🤖",
-    label: "Active Sweeper Bot (Compromised Key)",
-    category: "Sweeper Bot Trap",
-    defaultTitle: "Automated sweeper bot stealing incoming deposits",
-    defaultDesc: "Incoming ETH or tokens sent to this wallet are automatically drained within seconds to a consolidation vault.",
+    id: "phishing",
+    icon: "🎣",
+    label: "Phishing dApp / Impersonator",
+    desc: "Fake website or social account impersonating an official protocol.",
   },
   {
     id: "honeypot",
     icon: "🍯",
-    label: "Honeypot / Malicious Contract",
-    category: "Honeypot Token",
-    defaultTitle: "Token contract prevents selling or charges 100% tax",
-    defaultDesc: "Contract contains hidden transfer restrictions or blacklist functions preventing token sales.",
+    label: "Honeypot / Fake Token",
+    desc: "Token that cannot be sold (100% tax or transfer disabled).",
   },
   {
-    id: "impersonation",
-    icon: "🎭",
-    label: "Impersonation / Social Engineering",
-    category: "Fake Team / Impersonator",
-    defaultTitle: "Impersonating official Base team or protocol developer",
-    defaultDesc: "Address was used in Discord/Telegram/X DM scams posing as an official support agent or foundation member.",
+    id: "airdrop_scam",
+    icon: "🎁",
+    label: "Fake Airdrop / Claim Voucher",
+    desc: "Spam token prompting victims to sign malicious approvals.",
   },
   {
-    id: "exploit",
-    icon: "⚠️",
-    label: "Stolen Funds / Exploit Destination",
-    category: "Exploit Cashout Hub",
-    defaultTitle: "Recipient of hacked protocol liquidity or exploit funds",
-    defaultDesc: "On-chain inflows trace directly to a recent smart contract exploit or stolen vault assets.",
+    id: "rugpull",
+    icon: "📉",
+    label: "Rug Pull / Liquidity Drain",
+    desc: "Creator drained liquidity pool or minted unbacked tokens.",
   },
   {
-    id: "custom",
-    icon: "✍️",
-    label: "Custom Report",
-    category: "Community Report",
-    defaultTitle: "Suspicious activity report",
-    defaultDesc: "",
+    id: "compromised_key",
+    icon: "🔑",
+    label: "Compromised Private Key",
+    desc: "Account key was leaked and is actively abused by sweeper bots.",
   },
 ];
 
@@ -67,65 +55,58 @@ export default function ReportWalletModal({
   initialAddress = "",
   reporterAddress,
 }: ReportWalletModalProps) {
-  const [selectedTemplateId, setSelectedTemplateId] = useState("phishing");
   const [targetAddress, setTargetAddress] = useState(initialAddress);
-  const [title, setTitle] = useState(REPORT_TEMPLATES[0].defaultTitle);
-  const [description, setDescription] = useState(REPORT_TEMPLATES[0].defaultDesc);
-  const [txHash, setTxHash] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState(SCAM_TEMPLATES[0].id);
+  const [description, setDescription] = useState("");
+  const [proofUrl, setProofUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setTargetAddress(initialAddress);
+  }, [initialAddress]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const handleTemplateSelect = (templateId: string) => {
-    setSelectedTemplateId(templateId);
-    const t = REPORT_TEMPLATES.find((item) => item.id === templateId);
-    if (t) {
-      setTitle(t.defaultTitle);
-      setDescription(t.defaultDesc);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetAddress || !isAddress(targetAddress.trim())) {
-      setError("Please enter a valid Base address to report.");
-      return;
-    }
-
-    if (!title.trim() || !description.trim()) {
-      setError("Please provide a title and description for your report.");
+    if (!targetAddress || !isAddress(targetAddress)) {
+      setError("Please enter a valid EVM address on Base.");
       return;
     }
 
     setSubmitting(true);
     setError("");
-    setSuccessMessage("");
 
     try {
-      const selectedTemplate = REPORT_TEMPLATES.find((t) => t.id === selectedTemplateId);
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          targetAddress: targetAddress.trim(),
-          reporterAddress: reporterAddress || undefined,
-          category: selectedTemplate?.category || "Community Report",
-          title: title.trim(),
-          description: description.trim(),
-          txHash: txHash.trim() || undefined,
-          evidenceType: selectedTemplateId,
+          targetAddress,
+          scamType: selectedTemplate,
+          description,
+          proofUrl,
+          reporterAddress: reporterAddress || null,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Submission failed.");
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to submit report.");
+      }
 
-      setSuccessMessage(data.message || "Report recorded successfully!");
-      setTimeout(() => {
-        onClose();
-      }, 1800);
+      setSuccess(true);
     } catch (err: any) {
       setError(err?.message || "Failed to submit report.");
     } finally {
@@ -134,52 +115,47 @@ export default function ReportWalletModal({
   };
 
   return (
-    <div className="sendModalBackdrop" onClick={onClose}>
-      <div className="reportModalCard" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="sendModalHeader">
-          <div className="sendModalTitle">
-            <span className="sendShieldIcon">🚩</span>
+    <div className="modalBackdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Report Malicious Address">
+      <div className="modalCard reportModalCard" onClick={(e) => e.stopPropagation()}>
+        <div className="modalHeader">
+          <div className="modalTitleGroup">
+            <span className="modalEmblem dangerEmblem" aria-hidden="true">🚩</span>
             <div>
               <h3>Report Suspicious Address</h3>
-              <p>Submit on-chain evidence to alert the Shield AI network</p>
+              <p className="modalSubtitle">
+                Submit an on-chain threat report to Shield community intelligence.
+              </p>
             </div>
           </div>
-          <button type="button" className="closeBtn" onClick={onClose} aria-label="Close modal">
+          <button type="button" className="modalCloseBtn" onClick={onClose} aria-label="Close modal">
             ✕
           </button>
         </div>
 
-        {successMessage ? (
-          <div className="reportSuccessCard">
-            <span className="successIcon">✅</span>
-            <h4>Report Submitted</h4>
-            <p>{successMessage}</p>
+        {success ? (
+          <div className="reportSuccessCard" role="status">
+            <span className="successIcon" aria-hidden="true">✅</span>
+            <h4>Report Recorded</h4>
+            <p>
+              Thank you for keeping Base secure. Shield has registered this threat submission into the review watchlist.
+            </p>
+            <button
+              type="button"
+              className="primaryBtn"
+              onClick={() => {
+                setSuccess(false);
+                onClose();
+              }}
+            >
+              Done
+            </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="reportForm">
-            {/* Template Selector Grid */}
             <div className="formGroup">
-              <label>Select Scam Category / Template</label>
-              <div className="templatesGrid">
-                {REPORT_TEMPLATES.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    className={`templatePill ${selectedTemplateId === tpl.id ? "templateActive" : ""}`}
-                    onClick={() => handleTemplateSelect(tpl.id)}
-                  >
-                    <span className="tplIcon">{tpl.icon}</span>
-                    <span className="tplLabel">{tpl.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Target Address */}
-            <div className="formGroup">
-              <label>Target Address to Report (Base)</label>
+              <label htmlFor="reportedAddress">Target Address to Report (0x...)</label>
               <input
+                id="reportedAddress"
                 type="text"
                 value={targetAddress}
                 onChange={(e) => setTargetAddress(e.target.value)}
@@ -188,46 +164,49 @@ export default function ReportWalletModal({
               />
             </div>
 
-            {/* Report Title */}
             <div className="formGroup">
-              <label>Report Headline</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Brief summary of the incident..."
-                required
-              />
+              <label>Threat Category</label>
+              <div className="templatesGrid">
+                {SCAM_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    className={`templatePill ${selectedTemplate === tpl.id ? "templateActive" : ""}`}
+                    onClick={() => setSelectedTemplate(tpl.id)}
+                  >
+                    <span className="tplIcon" aria-hidden="true">{tpl.icon}</span>
+                    <span className="tplLabel">{tpl.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Detailed Description */}
             <div className="formGroup">
-              <label>Detailed Evidence & Incident Description</label>
+              <label htmlFor="scamDescription">Incident Description</label>
               <textarea
+                id="scamDescription"
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Explain what happened (e.g. website URL, drainer mechanism, or sweeper behavior)..."
-                required
+                placeholder="Explain what happened (e.g. 'Phishing site drained tokens when signing permit...')"
               />
             </div>
 
-            {/* Optional Tx Hash */}
             <div className="formGroup">
-              <label>Transaction Hash Proof (Optional)</label>
+              <label htmlFor="proofUrl">Evidence / Proof URL (Optional)</label>
               <input
-                type="text"
-                value={txHash}
-                onChange={(e) => setTxHash(e.target.value)}
-                placeholder="0x... (Incident transaction on Base)"
+                id="proofUrl"
+                type="url"
+                value={proofUrl}
+                onChange={(e) => setProofUrl(e.target.value)}
+                placeholder="https://basescan.org/tx/... or tweet/link"
               />
             </div>
 
-            {error && <div className="sendErrorBox">{error}</div>}
+            {error && <div className="errorBox" role="alert">{error}</div>}
 
-            {/* Actions */}
             <div className="modalActions">
-              <button type="button" className="cancelBtn" onClick={onClose}>
+              <button type="button" className="ghostBtn" onClick={onClose}>
                 Cancel
               </button>
               <button
@@ -235,7 +214,7 @@ export default function ReportWalletModal({
                 disabled={submitting || !targetAddress.trim()}
                 className="reportSubmitBtn"
               >
-                {submitting ? "Submitting Report..." : "🚩 Submit Report"}
+                {submitting ? "Submitting…" : "Submit Threat Report 🚩"}
               </button>
             </div>
           </form>

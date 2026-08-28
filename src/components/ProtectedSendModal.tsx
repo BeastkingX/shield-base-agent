@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { parseEther, isAddress, getAddress, type Address, type Hex } from "viem";
 import { switchToBase, isBaseChain, type Eip1193Provider } from "@/lib/wallet";
 import type { ScanReceipt, EvidenceItem } from "@/lib/scan-types";
@@ -34,6 +34,16 @@ export default function ProtectedSendModal({
   const [error, setError] = useState("");
   const [overrideWarning, setOverrideWarning] = useState(false);
   const [activePercentage, setActivePercentage] = useState<number | null>(null);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Fetch live token price in USD
   useEffect(() => {
@@ -191,7 +201,6 @@ export default function ProtectedSendModal({
     setTxHash(null);
 
     try {
-      // STRICT BASE MAINNET NETWORK ENFORCEMENT
       const currentChainHex = await provider.request({ method: "eth_chainId" });
       const currentChainId = Number.parseInt(String(currentChainHex), 16);
 
@@ -258,21 +267,23 @@ export default function ProtectedSendModal({
   };
 
   return (
-    <div className="sendModalBackdrop" onClick={onClose}>
-      <div className="sendModalCard" onClick={(e) => e.stopPropagation()}>
+    <div className="modalBackdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Protected Send Modal">
+      <div className="modalCard sendModalCard" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="sendModalHeader">
-          <div className="sendModalTitle">
-            <span className="sendShieldIcon">🛡️</span>
+        <div className="modalHeader">
+          <div className="modalTitleGroup">
+            <span className="modalEmblem" aria-hidden="true">🛡️</span>
             <div>
               <div className="modalBadgeRow">
                 <h3>Protected Send</h3>
-                <span className="basePill">Base Mainnet (8453)</span>
+                <span className="networkBadge">Base Mainnet (8453)</span>
               </div>
-              <p>Shield scans recipient and enforces Base network before broadcasting</p>
+              <p className="modalSubtitle">
+                Shield pre-scans the recipient and verifies network before broadcasting.
+              </p>
             </div>
           </div>
-          <button type="button" className="closeBtn" onClick={onClose} aria-label="Close modal">
+          <button type="button" className="modalCloseBtn" onClick={onClose} aria-label="Close modal">
             ✕
           </button>
         </div>
@@ -280,7 +291,7 @@ export default function ProtectedSendModal({
         <form onSubmit={handleSend} className="sendForm">
           {/* Asset & Amount Selector */}
           <div className="formGroup">
-            <div className="labelRow">
+            <div className="formLabelRow">
               <label>Asset & Amount</label>
               <div className="balanceRow">
                 <span>Available: <strong>{userBalance.toFixed(selectedToken.symbol === "USDC" ? 2 : 5)} {selectedToken.symbol}</strong></span>
@@ -312,8 +323,8 @@ export default function ProtectedSendModal({
               />
             </div>
 
-            {/* Interactive Percentage Quick-Buttons (25%, 50%, 75%, MAX) */}
-            <div className="interactivePercentageRow">
+            {/* Percentage Quick-Buttons */}
+            <div className="percentageButtonsRow">
               <div className="pctButtonGroup">
                 {[25, 50, 75, 100].map((pct) => (
                   <button
@@ -334,9 +345,8 @@ export default function ProtectedSendModal({
               )}
             </div>
 
-            {/* Insufficient Balance Alert */}
             {isInsufficientBalance && (
-              <div className="insufficientBalanceAlert">
+              <div className="errorBox" role="alert">
                 ⚠️ Insufficient balance: You have {userBalance.toFixed(5)} {selectedToken.symbol}, but entered {amount} {selectedToken.symbol}.
               </div>
             )}
@@ -358,15 +368,15 @@ export default function ProtectedSendModal({
 
           {/* Recipient Address */}
           <div className="formGroup">
-            <div className="labelRow">
+            <div className="formLabelRow">
               <label>Recipient Address (Base)</label>
               <div className="inputActionHelper">
                 {recipient ? (
-                  <button type="button" className="clearBtn" onClick={() => setRecipient("")}>
+                  <button type="button" className="ghostTextBtn" onClick={() => setRecipient("")}>
                     Clear ✕
                   </button>
                 ) : (
-                  <button type="button" className="pasteBtn" onClick={handlePasteRecipient}>
+                  <button type="button" className="ghostTextBtn" onClick={handlePasteRecipient}>
                     📋 Paste
                   </button>
                 )}
@@ -382,26 +392,26 @@ export default function ProtectedSendModal({
             />
           </div>
 
-          {/* Quick preset test recipients */}
+          {/* Preset Test Recipient Chips */}
           <div className="quickTestRow">
             <span>Quick test:</span>
             <button
               type="button"
-              className="presetBtn"
+              className="chipBtn"
               onClick={() => setRecipient("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")}
             >
               vitalik.eth (Safe)
             </button>
             <button
               type="button"
-              className="presetBtn"
+              className="chipBtn"
               onClick={() => setRecipient("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")}
             >
               USDC Contract (Proxy)
             </button>
           </div>
 
-          {/* Real-Time Pre-Flight Security Verdict & Full Readable Evidence */}
+          {/* Pre-Flight Security Verdict */}
           {recipientScan && (
             <div
               className={`preFlightBox ${
@@ -420,43 +430,22 @@ export default function ProtectedSendModal({
                     ? "🛑 HIGH RISK BLOCKED"
                     : "✅ RECIPIENT VERIFIED"}
                 </span>
-                <div
-                  className={`preFlightCoverageLarge ${
-                    isBlocked
-                      ? "coverageDanger"
-                      : recipientScan.verdict === "CAUTION"
-                      ? "coverageCaution"
-                      : "coverageSafe"
-                  }`}
-                >
-                  <span className="coverageLargeNumber">
-                    {isBlocked
-                      ? "0%"
-                      : `${Math.round(
-                          (recipientScan.coverage.completed /
-                            (recipientScan.coverage.total || 1)) *
-                            100
-                        )}%`}
-                  </span>
-                  <span className="coverageSmallLabel">
-                    {isBlocked
-                      ? "RISK ALERT (BLOCKED)"
-                      : `${recipientScan.coverage.completed}/${recipientScan.coverage.total} checks verified`}
-                  </span>
-                </div>
+                <span className="preFlightCoverageTag">
+                  {recipientScan.coverage.completed}/{recipientScan.coverage.total} checks verified
+                </span>
               </div>
               <p className="preFlightSummary">{recipientScan.summary}</p>
 
-              {/* 6/6 Readable Checklist */}
+              {/* Evidence Checklist Toggle */}
               <div className="evidenceChecklist">
                 <div className="checklistHeading">
                   <span>Deterministic Evidence Checks:</span>
                   <button
                     type="button"
-                    className="toggleDetailsBtn"
+                    className="ghostTextBtn"
                     onClick={() => setShowFullEvidence(!showFullEvidence)}
                   >
-                    {showFullEvidence ? "Hide Details ▲" : "View Details & Facts ▼"}
+                    {showFullEvidence ? "Hide Details ▲" : "View Details ▼"}
                   </button>
                 </div>
 
@@ -464,23 +453,12 @@ export default function ProtectedSendModal({
                   {recipientScan.evidence.map((item: EvidenceItem) => (
                     <div key={item.id} className={`checkCardRow status-${item.status}`}>
                       <div className="checkHeaderLine">
-                        <span className="checkIconBadge">
+                        <span className="checkIconBadge" aria-hidden="true">
                           {item.status === "pass" ? "✓" : item.status === "danger" ? "✕" : "•"}
                         </span>
                         <strong className="checkItemLabel">{item.label}</strong>
                       </div>
                       <p className="checkItemClaim">{item.claim}</p>
-
-                      {showFullEvidence && item.facts && Object.keys(item.facts).length > 0 && (
-                        <div className="itemFactsTable">
-                          {Object.entries(item.facts).map(([k, v]) => (
-                            <div key={k} className="factRow">
-                              <span>{k}:</span>
-                              <strong>{String(v)}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -508,10 +486,10 @@ export default function ProtectedSendModal({
             </div>
           )}
 
-          {error && <div className="sendErrorBox">{error}</div>}
+          {error && <div className="errorBox" role="alert">{error}</div>}
 
           {txHash && (
-            <div className="txSuccessBox">
+            <div className="txSuccessBox" role="status">
               <strong>Transaction Broadcast to Base Mainnet!</strong>
               <a
                 href={`https://basescan.org/tx/${txHash}`}
@@ -525,7 +503,7 @@ export default function ProtectedSendModal({
 
           {/* Modal Footer Actions */}
           <div className="modalActions">
-            <button type="button" className="cancelBtn" onClick={onClose}>
+            <button type="button" className="ghostBtn" onClick={onClose}>
               Cancel
             </button>
             <button
@@ -538,20 +516,18 @@ export default function ProtectedSendModal({
                 !isAddress(recipient) ||
                 (isBlocked && !overrideWarning)
               }
-              className={`sendConfirmBtn ${
-                isBlocked && !overrideWarning || isInsufficientBalance ? "btnDisabled" : ""
-              }`}
+              className="primaryBtn modalPrimaryBtn"
             >
               {sending ? (
                 <>
-                  <span className="miniSpinner" /> Broadcasting…
+                  <span className="spinner dark" aria-hidden="true" /> Broadcasting…
                 </>
               ) : isInsufficientBalance ? (
                 "Insufficient Balance"
               ) : isBlocked ? (
                 overrideWarning ? "Override & Send" : "Blocked by Shield"
               ) : (
-                "Protected Send on Base"
+                "Protected Send on Base →"
               )}
             </button>
           </div>

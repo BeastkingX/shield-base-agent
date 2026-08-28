@@ -17,11 +17,13 @@
     "zod": "latest"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
     "eslint-config-next": "latest",
+    "playwright": "^1.62.1",
     "tsx": "^4.23.12",
     "typescript": "latest",
     "vitest": "latest"

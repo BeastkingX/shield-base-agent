@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { InspectionReceipt } from "@/lib/popup-inspector";
 
 const DEMO_CLEAN_PERMIT = JSON.stringify(
@@ -53,6 +54,7 @@ export default function PopupInspector() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<InspectionReceipt | null>(null);
   const [error, setError] = useState("");
+  const [copiedHash, setCopiedHash] = useState(false);
 
   const handleInspect = async (textToInspect?: string) => {
     const text = textToInspect || payload;
@@ -99,22 +101,33 @@ export default function PopupInspector() {
     URL.revokeObjectURL(url);
   };
 
+  const handleCopyHash = async () => {
+    if (!result?.receiptHash) return;
+    await navigator.clipboard.writeText(result.receiptHash);
+    setCopiedHash(true);
+    setTimeout(() => setCopiedHash(false), 1600);
+  };
+
   return (
-    <div className="popupInspectorSection">
+    <section className="popupInspectorSection" aria-label="Pop-Up and Signature Inspector">
       <div className="inspectorHeader">
         <div>
-          <span className="sectionLabel">Pre-Signing Verification</span>
-          <h3>Check a Pop-Up or Signature</h3>
-          <p>
-            Is this pop-up safe to sign? Paste any EIP-712 typed data, permit signature, or contract call to audit permissions before you sign.
+          <div className="eyebrow">
+            <span /> Pre-Signing Verification
+          </div>
+          <h2>Check a Pop-Up or Signature</h2>
+          <p className="inspectorSubtitle">
+            Is this wallet pop-up safe to sign? Paste any EIP-712 typed data, permit signature, or contract call to audit permissions before you sign.
           </p>
         </div>
-        <span className="noLeakTag">Never paste private keys or seed words.</span>
+        <span className="noLeakTag" role="note">
+          🔒 Leak Guard: Never paste private keys or seed words
+        </span>
       </div>
 
       <div className="inspectorInputCard">
         <div className="cardTopRow">
-          <label>Paste EIP-712 JSON or Signature Payload</label>
+          <label htmlFor="signaturePayload">Paste EIP-712 JSON or Signature Payload</label>
           <div className="demoButtonsGroup">
             <span>Demos:</span>
             <button
@@ -141,28 +154,30 @@ export default function PopupInspector() {
         </div>
 
         <textarea
+          id="signaturePayload"
           rows={5}
           value={payload}
           onChange={(e) => setPayload(e.target.value)}
-          placeholder="Paste signature JSON (e.g. { 'domain': { 'name': 'Permit2' }, 'message': ... })"
+          placeholder='Paste signature JSON (e.g. { "domain": { "name": "Permit2" }, "message": ... })'
+          spellCheck={false}
         />
 
         <div className="inspectorActions">
-          <button type="button" className="pasteHelperBtn" onClick={handlePaste}>
+          <button type="button" className="ghostBtn" onClick={handlePaste}>
             📋 Paste from Clipboard
           </button>
           <button
             type="button"
-            className="inspectSubmitBtn"
+            className="primaryBtn"
             disabled={loading || !payload.trim()}
             onClick={() => handleInspect()}
           >
-            {loading ? "Inspecting Signature..." : "Inspect Pop-Up"}
+            {loading ? "Inspecting Signature…" : "Inspect Pop-Up →"}
           </button>
         </div>
       </div>
 
-      {error && <div className="sendErrorBox">{error}</div>}
+      {error && <div className="errorBox" role="alert">{error}</div>}
 
       {/* Inspection Results Card */}
       {result && (
@@ -177,7 +192,7 @@ export default function PopupInspector() {
         >
           <div className="resultHeadRow">
             <div className="verdictBadgeLarge">
-              <span>
+              <span aria-hidden="true">
                 {result.verdict === "DO NOT SIGN" || result.verdict === "SECURITY WARNING"
                   ? "🛑"
                   : result.verdict === "CAUTION — REVIEW"
@@ -186,12 +201,20 @@ export default function PopupInspector() {
               </span>
               <strong>{result.verdict}</strong>
             </div>
-            <button type="button" className="downloadReceiptBtn" onClick={downloadReceipt}>
-              Download JSON Receipt ↧
-            </button>
+            <div className="inspectionActionsGroup">
+              <button type="button" className="ghostBtn" onClick={downloadReceipt}>
+                Download Receipt ↧
+              </button>
+              <Link
+                href={`/verify?receipt=${encodeURIComponent(JSON.stringify(result))}`}
+                className="ghostBtn"
+              >
+                Verify Hash ↗
+              </Link>
+            </div>
           </div>
 
-          <h4 className="inspectTitle">{result.title}</h4>
+          <h3 className="inspectTitle">{result.title}</h3>
           <p className="inspectSummary">{result.summary}</p>
           {result.details && <p className="inspectDetails">{result.details}</p>}
 
@@ -202,7 +225,7 @@ export default function PopupInspector() {
               {result.evidence.map((item) => (
                 <div key={item.id} className={`checkCardRow status-${item.status}`}>
                   <div className="checkHeaderLine">
-                    <span className="checkIconBadge">
+                    <span className="checkIconBadge" aria-hidden="true">
                       {item.status === "pass" ? "✓" : item.status === "danger" ? "✕" : "•"}
                     </span>
                     <strong className="checkItemLabel">{item.label}</strong>
@@ -214,11 +237,21 @@ export default function PopupInspector() {
           )}
 
           <div className="hashReceiptFooter">
-            <span>Receipt Hash: <code>{result.receiptHash}</code></span>
+            <div className="hashLeft">
+              <span>Receipt Hash: <code>{result.receiptHash}</code></span>
+              <button
+                type="button"
+                className="copyHashInlineBtn"
+                onClick={handleCopyHash}
+                aria-label="Copy receipt hash"
+              >
+                {copiedHash ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
             <span>ID: <code>{result.receiptId}</code></span>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

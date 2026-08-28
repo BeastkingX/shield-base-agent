@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
 
 interface AgentCopilotProps {
   receipt?: ScanReceipt;
+  isOpen: boolean;
+  onClose: () => void;
+  onOpen: () => void;
   initialQuestion?: string;
+  onClearInitialQuestion?: () => void;
 }
 
 interface ChatMessage {
@@ -89,12 +93,22 @@ function FormattedMessage({ text }: { text: string }) {
   );
 }
 
-export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotProps) {
+export default function AgentCopilot({
+  receipt,
+  isOpen,
+  onClose,
+  onOpen,
+  initialQuestion,
+  onClearInitialQuestion,
+}: AgentCopilotProps) {
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const launcherButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerPanelRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const isSweeper = receipt?.clusterAnalysis?.isSweeperActive;
   const isTainted = receipt?.clusterAnalysis?.hasTaint;
@@ -105,25 +119,25 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
   // Default AI Detective Summary (Guarded when no receipt is present)
   const defaultSummary = (() => {
     if (!receipt) {
-      return `👋 **Shield AI Security Detective Online:** I analyze on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Click any question above or ask me anything to begin!`;
+      return `👋 **Shield AI Security Detective Online:** I explain on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Ask me anything or select a topic!`;
     }
     if (isSweeper) {
-      return `🚨 **CRITICAL HAZARD DETECTED:** This address is under an active **Sweeper Bot compromise**. Any ETH or tokens sent here will be automatically drained within seconds to a consolidation vault. **Do NOT send funds.**`;
+      return `🚨 **CRITICAL HAZARD DETECTED:** Target \`${receipt.address}\` is under an active **Sweeper Bot compromise**. Any ETH or tokens sent here will be automatically drained within seconds. **Do NOT send funds.**`;
     }
     if (isTainted) {
-      return `⚠️ **Adversarial Cluster Taint:** This address was funded by a known drainer dispenser (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"}) or forwards proceeds to a malicious vault. High risk of asset loss.`;
+      return `⚠️ **Adversarial Cluster Taint:** Target \`${receipt.address}\` was funded by a known drainer dispenser (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"}) or forwards proceeds to a malicious vault.`;
     }
     if (isEip7702) {
-      return `⚡ **EIP-7702 Delegated Wallet:** This account executes smart account logic via an on-chain delegate contract while retaining standard EOA transaction origination. Indexed **${approvalsCount} active approvals** (${unlimitedCount} unlimited) across canonical protocols like Uniswap and Aerodrome. Clean money-trail observed.`;
+      return `⚡ **EIP-7702 Delegated Wallet:** Target \`${receipt.address}\` executes smart account logic via an on-chain delegate contract. Indexed **${approvalsCount} active approvals** (${unlimitedCount} unlimited). Clean money-trail observed.`;
     }
     if (receipt.targetType === "contract") {
       const isProxy = receipt.evidence.some((e) => e.id === "EVIDENCE_CONTRACT_VERIFICATION" && e.status === "warning");
       if (isProxy) {
-        return `🔍 **Verified Proxy Contract:** This contract is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Standard for institutional tokens, but implementation logic can be updated by governance.`;
+        return `🔍 **Verified Proxy Contract:** Target \`${receipt.address}\` is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Implementation logic can be upgraded by owner.`;
       }
-      return `✅ **Verified Smart Contract:** Official contract deployment on Base Mainnet with published source metadata and verified deployment provenance.`;
+      return `✅ **Verified Smart Contract:** Target \`${receipt.address}\` has published source metadata and verified deployment provenance on Base.`;
     }
-    return `✅ **Standard EOA Wallet:** Normal wallet address on Base with clean 1-hop upstream gas funding and no links to known drainer hubs.`;
+    return `✅ **Standard EOA Wallet:** Target \`${receipt.address}\` has no bytecode, clean 1-hop upstream gas funding, and no links to known drainer hubs.`;
   })();
 
   const quickPrompts = receipt
@@ -140,17 +154,103 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
         "Why are unlimited token approvals dangerous?",
       ];
 
-  // Auto-trigger question from carousel
+  const handleAsk = useCallback(
+    async (queryText?: string) => {
+      const text = queryText || question;
+      if (!text.trim() || loading) return;
+
+      const userMessage = text.trim();
+      const userMsgObj: ChatMessage = {
+        id: `user_${Date.now()}`,
+        role: "user",
+        text: userMessage,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+
+      setChatHistory((prev) => [...prev, userMsgObj]);
+      setQuestion("");
+      setLoading(true);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: userMessage,
+            ...(receipt ? { receipt } : {}),
+            history: chatHistory.slice(-4),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const agentMsgObj: ChatMessage = {
+            id: `agent_${Date.now()}`,
+            role: "agent",
+            text: data.reply,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setChatHistory((prev) => [...prev, agentMsgObj]);
+        } else {
+          throw new Error("Failed to reach AI Detective.");
+        }
+      } catch {
+        setChatHistory((prev) => [
+          ...prev,
+          {
+            id: `agent_${Date.now()}`,
+            role: "agent",
+            text: receipt
+              ? `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage?.completed}/${receipt.coverage?.total} checks completed).\n• **Summary:** ${receipt.summary}`
+              : `🛡️ **Shield AI Agent:** Active on Base Mainnet. Ask me any question about wallet security, sweeper bots, or on-chain risks!`,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [question, loading, receipt, chatHistory],
+  );
+
+  // Auto-trigger question when set from carousel or external trigger
   useEffect(() => {
     if (initialQuestion && initialQuestion.trim()) {
-      handleAsk(initialQuestion.trim());
+      onOpen();
+      void handleAsk(initialQuestion.trim());
+      onClearInitialQuestion?.();
     }
-  }, [initialQuestion]);
+  }, [initialQuestion, handleAsk, onOpen, onClearInitialQuestion]);
 
-  // Auto-scroll on new message
+  // Focus trap & Escape key handler
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory, loading]);
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        launcherButtonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 150);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      clearTimeout(timer);
+    };
+  }, [isOpen, onClose]);
+
+  // Auto-scroll chat feed
+  useEffect(() => {
+    if (isOpen) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatHistory, loading, isOpen]);
 
   const handleCopyMessage = async (msgId: string, text: string) => {
     try {
@@ -164,98 +264,108 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
     setChatHistory([]);
   };
 
-  const handleAsk = async (queryText?: string) => {
-    const text = queryText || question;
-    if (!text.trim() || loading) return;
-
-    const userMessage = text.trim();
-    const userMsgObj: ChatMessage = {
-      id: `user_${Date.now()}`,
-      role: "user",
-      text: userMessage,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    setChatHistory((prev) => [...prev, userMsgObj]);
-    setQuestion("");
-    setLoading(true);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: userMessage,
-          ...(receipt ? { receipt } : {}),
-          history: chatHistory.slice(-4),
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const agentMsgObj: ChatMessage = {
-          id: `agent_${Date.now()}`,
-          role: "agent",
-          text: data.reply,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setChatHistory((prev) => [...prev, agentMsgObj]);
-      } else {
-        throw new Error("Failed to reach AI Detective.");
-      }
-    } catch (err: any) {
-      setChatHistory((prev) => [
-        ...prev,
-        {
-          id: `agent_${Date.now()}`,
-          role: "agent",
-          text: receipt
-            ? `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage?.completed}/${receipt.coverage?.total} checks completed).\n• **Recommendation:** Proceed with standard precautions.`
-            : `🛡️ **Shield AI Agent:** Active on Base Mainnet. Ask me any question about wallet security, sweeper bots, or on-chain risks!`,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="agentCopilot">
-      {/* Copilot Header */}
-      <div className="agentHeader">
-        <div className="agentTitle">
-          <span className="agentBadge">AI Security Detective</span>
-          <h4>Shield Copilot Intelligence</h4>
+    <>
+      {/* Floating Dock Launcher Button (always on bottom-right) */}
+      <button
+        ref={launcherButtonRef}
+        type="button"
+        className={`floatingDockLauncher ${isOpen ? "launcherActive" : ""}`}
+        onClick={() => {
+          if (isOpen) {
+            onClose();
+          } else {
+            onOpen();
+          }
+        }}
+        aria-label="Open Shield AI Security Detective Copilot"
+        aria-expanded={isOpen}
+        aria-controls="shield-chat-dock"
+      >
+        <span className="dockSparkle" aria-hidden="true">✦</span>
+        <span className="dockLabel">Ask Shield</span>
+        {receipt && <span className="dockContextDot" title="Scan receipt grounded" />}
+      </button>
+
+      {/* Slide-over Drawer / Floating Dock Panel */}
+      {isOpen && (
+        <div
+          className="dockBackdrop"
+          onClick={() => {
+            onClose();
+            launcherButtonRef.current?.focus();
+          }}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        id="shield-chat-dock"
+        ref={drawerPanelRef}
+        className={`floatingDockDrawer ${isOpen ? "dockOpen" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shield AI Security Detective Copilot"
+      >
+        {/* Drawer Header */}
+        <div className="dockHeader">
+          <div className="dockTitleGroup">
+            <div className="dockEmblem">✦</div>
+            <div>
+              <div className="dockBadgeRow">
+                <span className="dockBadge">AI Security Detective</span>
+                <span className="dockLiveDot" title="Online" />
+              </div>
+              <h3 className="dockTitle">Shield Copilot</h3>
+            </div>
+          </div>
+          <div className="dockHeaderActions">
+            {chatHistory.length > 0 && (
+              <button
+                type="button"
+                className="dockClearBtn"
+                onClick={handleClearChat}
+                title="Reset conversation"
+              >
+                Reset ↻
+              </button>
+            )}
+            <button
+              type="button"
+              className="dockCloseBtn"
+              onClick={() => {
+                onClose();
+                launcherButtonRef.current?.focus();
+              }}
+              aria-label="Close Shield Copilot drawer"
+            >
+              ✕
+            </button>
+          </div>
         </div>
-        <div className="copilotHeaderActions">
-          <div className="agentStatus">
-            <span className="liveDot" />
-            <span>
-              {receipt
-                ? `Active on Base #${Number(receipt.blockNumber).toLocaleString()}`
-                : "Base Mainnet Guardian"}
+
+        {/* Target Context Pill if scan active */}
+        {receipt && (
+          <div className="dockContextPill">
+            <span>Grounded on:</span>
+            <code>{receipt.address.slice(0, 8)}...{receipt.address.slice(-6)}</code>
+            <span className={`dockVerdictTag verdictTag-${receipt.verdict.toLowerCase().replaceAll(" ", "-")}`}>
+              {receipt.verdict}
             </span>
           </div>
-          {chatHistory.length > 0 && (
-            <button type="button" className="clearChatBtn" onClick={handleClearChat} title="Reset conversation">
-              Reset ↻
-            </button>
-          )}
-        </div>
-      </div>
+        )}
 
-      {/* Default Summary Box */}
-      <div className="agentSummaryBox">
-        <div className="agentIcon">🤖</div>
-        <div className="agentText">
-          <FormattedMessage text={defaultSummary} />
-        </div>
-      </div>
+        {/* Scrollable Conversation Body */}
+        <div className="dockBody">
+          {/* Default Summary Box */}
+          <div className="dockSummaryCard">
+            <div className="summaryIcon" aria-hidden="true">🛡️</div>
+            <div className="summaryText">
+              <FormattedMessage text={defaultSummary} />
+            </div>
+          </div>
 
-      {/* Conversational Feed */}
-      {chatHistory.length > 0 && (
-        <div className="agentChatFeed">
+          {/* Chat Messages */}
           {chatHistory.map((item) => (
             <div key={item.id} className={`chatBubble bubble-${item.role}`}>
               <div className="bubbleTopLine">
@@ -265,6 +375,7 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
                     type="button"
                     className="copyBubbleBtn"
                     onClick={() => handleCopyMessage(item.id, item.text)}
+                    aria-label="Copy message"
                   >
                     {copiedId === item.id ? "Copied ✓" : "Copy 📋"}
                   </button>
@@ -274,52 +385,67 @@ export default function AgentCopilot({ receipt, initialQuestion }: AgentCopilotP
               <span className="bubbleTime">{item.timestamp}</span>
             </div>
           ))}
+
           {loading && (
             <div className="chatBubble bubble-agent agentTypingBubble">
-              <span className="typingIndicator">
+              <span className="typingIndicator" aria-hidden="true">
                 <span className="dot" />
                 <span className="dot" />
                 <span className="dot" />
               </span>
-              <span className="typingText">Shield AI is synthesizing on-chain evidence…</span>
+              <span className="typingText">Shield AI is synthesizing on-chain facts…</span>
             </div>
           )}
           <div ref={chatEndRef} />
         </div>
-      )}
 
-      {/* Quick Prompts */}
-      <div className="agentQuickPrompts">
-        <span>Quick queries:</span>
-        {quickPrompts.map((p) => (
-          <button key={p} type="button" onClick={() => handleAsk(p)}>
-            {p}
+        {/* Quick Suggestion Prompts */}
+        <div className="dockQuickPrompts">
+          <span className="quickPromptHeading">Suggested questions:</span>
+          <div className="quickChipsScroll">
+            {quickPrompts.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className="quickPromptChip"
+                onClick={() => handleAsk(p)}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Input Form Footer */}
+        <form
+          className="dockInputForm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAsk();
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder={
+              receipt
+                ? `Ask about ${receipt.address.slice(0, 6)}...`
+                : "Ask about on-chain security..."
+            }
+            aria-label="Ask a question to Shield AI"
+          />
+          <button
+            type="submit"
+            className="dockSendBtn"
+            disabled={!question.trim() || loading}
+            aria-label="Send message"
+          >
+            {loading ? "..." : "Ask →"}
           </button>
-        ))}
-      </div>
-
-      {/* Input Row */}
-      <form
-        className="agentInputRow"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleAsk();
-        }}
-      >
-        <input
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder={
-            receipt
-              ? `Ask Shield AI about ${receipt.address.slice(0, 8)}... (e.g. 'Is it safe to send?')`
-              : "Ask Shield AI (e.g. 'What is a sweeper bot?')..."
-          }
-        />
-        <button type="submit" disabled={!question.trim() || loading}>
-          {loading ? "Reasoning…" : "Ask Agent"}
-        </button>
-      </form>
-    </div>
+        </form>
+      </aside>
+    </>
   );
 }

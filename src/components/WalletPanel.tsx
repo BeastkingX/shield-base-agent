@@ -11,7 +11,6 @@ import {
   WalletConnectError,
   type Eip1193Provider,
 } from "@/lib/wallet";
-import ProtectedSendModal from "./ProtectedSendModal";
 
 interface WalletPanelProps {
   /** Called with the connected account whenever Shield should scan it. */
@@ -45,9 +44,6 @@ export default function WalletPanel({
     let cancelled = false;
     let dispose: (() => void) | undefined;
 
-    // Detection runs on the next tick so the server-rendered markup and the
-    // first client render agree (both say "checking"), avoiding hydration
-    // mismatches while keeping state updates out of the effect body.
     const timer = window.setTimeout(() => {
       if (cancelled) return;
       const injected = getInjectedWallet();
@@ -144,34 +140,27 @@ export default function WalletPanel({
 
   if (status === "checking") {
     return (
-      <div className="walletPanel">
-        <p className="walletNote" role="status">
-          Checking for a wallet extension…
-        </p>
+      <div className="walletSlimRow">
+        <span className="walletNoteText">Checking wallet provider…</span>
       </div>
     );
   }
 
   if (status === "unsupported") {
     return (
-      <div className="walletPanel">
-        <p className="walletNote" role="status">
-          <strong>No wallet extension detected.</strong> Install{" "}
-          <a href="https://metamask.io/download/" target="_blank" rel="noreferrer">MetaMask</a>,{" "}
-          <a href="https://rabby.io/" target="_blank" rel="noreferrer">Rabby</a>, or{" "}
-          <a href="https://www.coinbase.com/wallet" target="_blank" rel="noreferrer">Coinbase Wallet</a>{" "}
-          to scan your own wallet automatically — or keep using the address box above.
-        </p>
+      <div className="walletSlimRow">
+        <span className="walletNoteText">
+          Connect your wallet extension (MetaMask, Coinbase Wallet, Rabby) to scan your address automatically.
+        </span>
       </div>
     );
   }
 
   if (status !== "connected") {
     return (
-      <div className="walletPanel">
-        <div className="walletDivider"><span>Or connect your wallet</span></div>
+      <div className="walletSlimRow">
         <button
-          className="walletConnectBtn"
+          className="walletGhostBtn"
           type="button"
           disabled={status === "connecting"}
           onClick={handleConnect}
@@ -179,20 +168,17 @@ export default function WalletPanel({
           {status === "connecting" ? (
             <>
               <span className="spinner dark" aria-hidden="true" />
-              Waiting for your wallet…
+              <span>Connecting…</span>
             </>
           ) : (
             <>
               <span className="walletIcon" aria-hidden="true">◈</span>
-              Connect wallet
-              <span className="walletBtnTag">Shield scans it instantly</span>
+              <span>Connect wallet</span>
+              <span className="walletChipHint">Auto-scans your address</span>
             </>
           )}
         </button>
-        {error && <p className="walletError" role="alert">{error}</p>}
-        <p className="walletNote">
-          Read-only by default — Protected Send option available after connect.
-        </p>
+        {error && <span className="walletInlineError" role="alert">{error}</span>}
       </div>
     );
   }
@@ -200,52 +186,62 @@ export default function WalletPanel({
   const onBase = isBaseChain(chainId);
 
   return (
-    <div className="walletPanel">
-      <div className="walletCard">
-        <div className="walletInfo">
-          <span className="walletIcon" aria-hidden="true">◈</span>
-          <div className="walletMeta">
-            <strong>{name} connected</strong>
-            <span className="walletAddr">
-              {shortAddress(address)}
-              <button className="walletCopyBtn" type="button" onClick={handleCopy}>
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </span>
-          </div>
-          <span className={`networkBadge ${onBase ? "" : "off"}`}>
+    <div className="walletConnectedContainer">
+      <div className="walletConnectedBar">
+        <div className="walletIdentityGroup">
+          <span className="walletConnectedDot" aria-hidden="true" />
+          <strong className="walletProviderName">{name}</strong>
+          <code className="walletAddressCode">{shortAddress(address)}</code>
+          <button
+            className="walletCopyIconBtn"
+            type="button"
+            onClick={handleCopy}
+            aria-label="Copy connected wallet address"
+          >
+            {copied ? "✓" : "📋"}
+          </button>
+          <span className={`walletNetworkTag ${onBase ? "networkBase" : "networkWarn"}`}>
             {onBase ? "Base Mainnet" : describeChain(chainId)}
           </span>
         </div>
-        <div className="walletActions">
+
+        <div className="walletActionBar">
           {!onBase && (
-            <button type="button" disabled={switching} onClick={handleSwitchToBase}>
+            <button
+              type="button"
+              className="walletGhostBtn actionBtnSmall"
+              disabled={switching}
+              onClick={handleSwitchToBase}
+            >
               {switching ? "Switching…" : "Switch to Base"}
             </button>
           )}
           <button
-            className="primaryAction"
             type="button"
+            className="walletActionSendBtn"
             onClick={() => onOpenSendModal?.()}
           >
             🛡️ Protected Send
           </button>
           <button
             type="button"
+            className="walletGhostBtn actionBtnSmall"
             disabled={scanning}
             onClick={() => onAddress(address)}
           >
-            {scanning ? "Scanning…" : "Re-scan wallet"}
+            {scanning ? "Scanning…" : "Re-scan"}
           </button>
-          <button className="subtleAction" type="button" onClick={handleDisconnect}>
+          <button
+            className="walletDisconnectBtn"
+            type="button"
+            onClick={handleDisconnect}
+            aria-label="Disconnect wallet"
+          >
             Disconnect
           </button>
         </div>
       </div>
-      {error && <p className="walletError" role="alert">{error}</p>}
-      <p className="walletNote" role="status">
-        Connected to Base Mainnet. Use <strong>Protected Send</strong> to verify any recipient address before broadcasting.
-      </p>
+      {error && <p className="walletInlineError" role="alert">{error}</p>}
     </div>
   );
 }

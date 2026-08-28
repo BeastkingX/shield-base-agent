@@ -87,7 +87,7 @@ export default function WalletHealthCard({
       {/* Top Banner */}
       <div className="healthTop">
         <div className="healthIdentity">
-          <span className="healthAvatar">🛡️</span>
+          <span className="healthAvatar" aria-hidden="true">🛡️</span>
           <div>
             <div className="healthLabelRow">
               <span className="healthBadge">Connected Wallet Profile</span>
@@ -114,7 +114,7 @@ export default function WalletHealthCard({
       <div className="healthMetricsGrid">
         {/* Security Health */}
         <div className={`metricCol ${isSweeper ? "metricDanger" : "metricSafe"}`}>
-          <span className="metricIcon">{isSweeper ? "🚨" : "✅"}</span>
+          <span className="metricIcon" aria-hidden="true">{isSweeper ? "🚨" : "✅"}</span>
           <div>
             <span className="metricTitle">Security & Compromise Health</span>
             <strong>
@@ -134,7 +134,7 @@ export default function WalletHealthCard({
 
         {/* Balances */}
         <div className="metricCol">
-          <span className="metricIcon">💰</span>
+          <span className="metricIcon" aria-hidden="true">💰</span>
           <div>
             <span className="metricTitle">Available Balance</span>
             <strong>
@@ -147,7 +147,7 @@ export default function WalletHealthCard({
 
         {/* Approvals Exposure */}
         <div className="metricCol">
-          <span className="metricIcon">🔒</span>
+          <span className="metricIcon" aria-hidden="true">🔒</span>
           <div>
             <span className="metricTitle">Token Approvals Exposure</span>
             <strong>
@@ -167,22 +167,22 @@ export default function WalletHealthCard({
       {/* Action Strip */}
       <div className="healthActionsStrip">
         <div className="healthTip">
-          <span>💡</span>
+          <span aria-hidden="true">💡</span>
           <p>
-            You can send tokens safely using <strong>Protected Send</strong>. Shield scans any recipient address and verifies network before broadcasting.
+            Send tokens safely using <strong>Protected Send</strong>. Shield scans any recipient address and verifies network before broadcasting.
           </p>
         </div>
 
         <div className="healthBtnGroup">
-          <button type="button" className="healthPrimaryBtn" onClick={onOpenSendModal}>
+          <button type="button" className="primaryBtn" onClick={onOpenSendModal}>
             🛡️ Protected Send
           </button>
           <button
             type="button"
-            className="healthSecondaryBtn"
+            className="ghostBtn"
             onClick={onToggleTechnicalEvidence}
           >
-            {showTechnicalEvidence ? "Hide Raw Evidence ▲" : "Inspect Raw 6/6 Evidence ▼"}
+            {showTechnicalEvidence ? "Hide Raw Evidence ▲" : "Inspect Raw Evidence ▼"}
           </button>
         </div>
       </div>
