@@ -346,9 +346,9 @@ describe("Shield scan orchestration", () => {
 
     expect(threatIntel).toMatchObject({
       status: "danger",
-      source: "goplus-address-security",
+      source: "threat-intel-union",
     });
-    expect(threatIntel?.facts?.["Danger flags"]).toContain("phishing_activities");
+    expect(threatIntel?.facts?.["GoPlus (Base)"]).toContain("phishing_activities");
     expect(receipt.verdict).toBe("HIGH OBSERVED RISK");
   });
 });

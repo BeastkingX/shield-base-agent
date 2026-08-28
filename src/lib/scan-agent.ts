@@ -23,6 +23,7 @@ import {
 import { fetchApprovalsForWallet, type ApprovalsSummary } from "./approvals";
 import { analyzeClusterTaint, type ClusterAnalysis } from "./cluster-detector";
 import { getKnown7702Delegate } from "./delegate-registry";
+import { getThreatReport, type UnifiedThreatReport } from "./threat-intel";
 import { evaluateRisk, RISK_ENGINE_VERSION } from "./risk-engine";
 import type {
   EvidenceCategory,
@@ -962,44 +963,52 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     );
   }
 
-  // Third-party threat intelligence (GoPlus address security, free endpoint for wallets)
+  // Third-party threat intelligence (GoPlus Base + GoPlus Ethereum + ScamSniffer DB)
   if (targetType === "wallet") {
     try {
-      const threatData = await getThreatFlags(address);
-      if (threatData) {
-        const { dangerHits, warnHits, dataSource } = threatData;
-        items.push(
-          evidence(context, {
-            id: "EVIDENCE_THREAT_INTEL",
-            category: "history",
-            label: dangerHits.length
-              ? `Threat-intel match: ${dangerHits.join(", ")}`
-              : warnHits.length
-                ? `Threat-intel caution flags: ${warnHits.join(", ")}`
-                : "No third-party threat-intel flags",
-            status: dangerHits.length ? "danger" : warnHits.length ? "warning" : "pass",
-            claim: dangerHits.length
-              ? `GoPlus address intelligence lists this address for: ${dangerHits.join(", ")}.`
-              : warnHits.length
-                ? `GoPlus address intelligence flags caution categories: ${warnHits.join(", ")}.`
-                : "GoPlus address intelligence returned no malicious flags for this address.",
-            source: "goplus-address-security",
-            method: "GET api.gopluslabs.io/api/v1/address_security (chain 8453)",
-            rawValue: dangerHits.length + warnHits.length,
-            facts: {
-              "Danger flags": dangerHits.join(", ") || "none",
-              "Caution flags": warnHits.join(", ") || "none",
-              "Data source noted by provider": dataSource,
-            },
-            referenceUrl: `https://gopluslabs.io/`,
-            limitations: [
-              "Third-party threat lists can lag fresh attackers and may contain stale or disputed entries; a flag is a strong signal, not proof, and a clean result is not a guarantee.",
-            ],
-          }),
-        );
-      } else {
-        throw new Error("GoPlus query returned empty");
+      const threatReport = await getThreatReport(address);
+      if (threatReport.overallStatus === "unavailable") {
+        throw new Error("All threat intelligence providers were unavailable");
       }
+
+      const dangerList = threatReport.dangerFlags;
+      const cautionList = threatReport.cautionFlags;
+
+      items.push(
+        evidence(context, {
+          id: "EVIDENCE_THREAT_INTEL",
+          category: "history",
+          label: dangerList.length
+            ? `Threat-intel match: ${dangerList.join(", ")}`
+            : cautionList.length
+              ? `Threat-intel caution flags: ${cautionList.join(", ")}`
+              : "No third-party threat-intel flags",
+          status: threatReport.overallStatus,
+          claim: dangerList.length
+            ? `Threat intelligence flagged this address across ${dangerList.length} source/category: ${dangerList.join(", ")}.`
+            : cautionList.length
+              ? `Threat intelligence flags caution categories: ${cautionList.join(", ")}.`
+              : "No threats listed across 3 independent threat intelligence sources (GoPlus Base, GoPlus Ethereum, ScamSniffer DB).",
+          source: "threat-intel-union",
+          method: "GoPlus (Base + Ethereum) + ScamSniffer DB",
+          rawValue: dangerList.length + cautionList.length,
+          facts: {
+            "GoPlus (Base)": threatReport.goplusBase.detail,
+            "GoPlus (Ethereum)": threatReport.goplusEth.detail,
+            "ScamSniffer DB":
+              threatReport.scamsniffer === "listed"
+                ? "Blacklisted Phishing/Drainer"
+                : threatReport.scamsniffer === "not-listed"
+                  ? "Not listed"
+                  : "Unavailable",
+            "Sources checked": `${threatReport.sourcesChecked}/3 providers`,
+          },
+          referenceUrl: "https://gopluslabs.io/",
+          limitations: [
+            "Third-party threat lists can lag fresh attackers and may contain stale or disputed entries; a flag is a strong signal, not proof, and a clean result is not a guarantee.",
+          ],
+        }),
+      );
     } catch (error) {
       items.push(
         unavailableEvidence(
@@ -1008,8 +1017,8 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           "EVIDENCE_THREAT_INTEL",
           "Threat-intel check unavailable",
           "The third-party threat-intel provider could not be queried at scan time; this check is an explicit gap, not a pass.",
-          "goplus-address-security",
-          "GET api.gopluslabs.io/api/v1/address_security (chain 8453)",
+          "threat-intel-union",
+          "GoPlus (Base + Ethereum) + ScamSniffer DB",
           ["No threat-intel data was available; absence of evidence was not treated as evidence."],
         ),
       );

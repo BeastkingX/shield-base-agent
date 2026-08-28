@@ -15,6 +15,7 @@ import ProtectedSendModal from "@/components/ProtectedSendModal";
 import ReportWalletModal from "@/components/ReportWalletModal";
 import ShieldLogo from "@/components/ShieldLogo";
 import AiEducationCarousel from "@/components/AiEducationCarousel";
+import PopupInspector from "@/components/PopupInspector";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
@@ -175,6 +176,7 @@ export default function Home() {
           >
             🚩 Report Scam
           </button>
+          <a href="#popup-inspector">Check Pop-Up</a>
           <a href="#method">Method</a>
           <div className="networkPill">
             <span className={`networkDot ${health?.ok ? "online" : ""}`} />
@@ -608,26 +610,30 @@ export default function Home() {
             </button>
           </div>
         </section>
-      ) : (
-        <section className="method shell" id="method">
-          <div className="methodIntro">
-            <span className="sectionLabel">Built for verifiability</span>
-            <h2>Not a black-box risk score.</h2>
-            <p>Shield separates observed facts, deterministic rules, and known limitations so you can audit how a verdict was produced.</p>
-          </div>
-          <div className="steps">
-            <article><span>01</span><div className="stepIcon">⌁</div><h3>Classify</h3><p>Detect a wallet or contract from bytecode at a specific Base block.</p></article>
-            <article><span>02</span><div className="stepIcon">◫</div><h3>Collect</h3><p>Read RPC state, verified source metadata, deployment, and recent activity.</p></article>
-            <article><span>03</span><div className="stepIcon">◇</div><h3>Evaluate</h3><p>Apply public, versioned rules. Missing data blocks a low-risk conclusion.</p></article>
-            <article><span>04</span><div className="stepIcon">↧</div><h3>Prove</h3><p>Export a receipt with source methods, blocks, facts, and limitations.</p></article>
-          </div>
-          <div className="providerStrip">
-            <div><span className={`providerDot ${health?.ok ? "online" : ""}`} /><p><strong>Base RPC</strong><small>{health?.ok ? `${health.latencyMs} ms · connected` : "Checking connection"}</small></p></div>
-            <div><span className={`providerDot ${health?.services?.sourceMetadata === "configured" && health?.services?.indexedHistory === "configured" ? "online" : "waiting"}`} /><p><strong>Indexed evidence</strong><small>{health?.services?.sourceMetadata === "configured" && health?.services?.indexedHistory === "configured" ? "Etherscan source + Blockscout history" : health?.services?.sourceMetadata === "configured" ? "Source ready · add Blockscout for history" : "Requires server API keys"}</small></p></div>
-            <p>Provider failures become explicit unavailable evidence—not passed checks.</p>
-          </div>
-        </section>
-      )}
+      ) : null}
+
+      <section id="popup-inspector" className="shell">
+        <PopupInspector />
+      </section>
+
+      <section className="method shell" id="method">
+        <div className="methodIntro">
+          <span className="sectionLabel">Built for verifiability</span>
+          <h2>Not a black-box risk score.</h2>
+          <p>Shield separates observed facts, deterministic rules, and known limitations so you can audit how a verdict was produced.</p>
+        </div>
+        <div className="steps">
+          <article><span>01</span><div className="stepIcon">⌁</div><h3>Classify</h3><p>Detect a wallet or contract from bytecode at a specific Base block.</p></article>
+          <article><span>02</span><div className="stepIcon">◫</div><h3>Collect</h3><p>Read RPC state, verified source metadata, deployment, and recent activity.</p></article>
+          <article><span>03</span><div className="stepIcon">◇</div><h3>Evaluate</h3><p>Apply public, versioned rules. Missing data blocks a low-risk conclusion.</p></article>
+          <article><span>04</span><div className="stepIcon">↧</div><h3>Prove</h3><p>Export a receipt with source methods, blocks, facts, and limitations.</p></article>
+        </div>
+        <div className="providerStrip">
+          <div><span className={`providerDot ${health?.ok ? "online" : ""}`} /><p><strong>Base RPC</strong><small>{health?.ok ? `${health.latencyMs} ms · connected` : "Checking connection"}</small></p></div>
+          <div><span className={`providerDot ${health?.services?.sourceMetadata === "configured" && health?.services?.indexedHistory === "configured" ? "online" : "waiting"}`} /><p><strong>Indexed evidence</strong><small>{health?.services?.sourceMetadata === "configured" && health?.services?.indexedHistory === "configured" ? "Etherscan source + Blockscout history" : health?.services?.sourceMetadata === "configured" ? "Source ready · add Blockscout for history" : "Requires server API keys"}</small></p></div>
+          <p>Provider failures become explicit unavailable evidence—not passed checks.</p>
+        </div>
+      </section>
 
       <footer className="shell">
         <div className="brand">
