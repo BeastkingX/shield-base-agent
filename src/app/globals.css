@@ -2392,6 +2392,14 @@ a { color: inherit; }
 .shieldLogoWrapper:hover { transform: scale(1.06); }
 .shieldLogoSvg { width: 100%; height: 100%; }
 
+/* Progress stages readable separated chips */
+.progressStages {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
 /* Footer Socials */
 .footerSocialLinks {
   display: flex;

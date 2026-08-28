@@ -770,6 +770,17 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             ? delegateCreationRes.value?.data?.contractCreator
             : "Unknown";
 
+        let creatorActivity = "Unknown";
+        if (creator && isAddress(creator)) {
+          try {
+            const cNonce = await baseClient.getTransactionCount({
+              address: creator as Address,
+              blockNumber,
+            });
+            creatorActivity = `${cNonce} sent transactions`;
+          } catch {}
+        }
+
         const hasDangerThreat =
           delegateThreat.status === "fulfilled" &&
           delegateThreat.value &&
@@ -807,6 +818,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
               "Contract name": contractName,
               "Framework / Registry": knownDelegate?.framework || "Custom / Unknown",
               Creator: creator || "Unknown",
+              "Delegate creator activity": creatorActivity,
               "Threat flags":
                 delegateThreat.status === "fulfilled" && delegateThreat.value?.dangerHits.length
                   ? delegateThreat.value.dangerHits.join(", ")
@@ -815,6 +827,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             referenceUrl: addressExplorerUrl(delegationAddress),
             limitations: [
               "Depth capped at 1: only the delegate itself is evaluated; code it calls internally is out of scope for this check.",
+              "Every wallet delegated to this contract shares this risk.",
             ],
           }),
         );

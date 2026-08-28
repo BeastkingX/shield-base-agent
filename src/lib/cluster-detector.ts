@@ -51,6 +51,8 @@ export interface ClusterAnalysis {
   hubProfile: string;
   hop2Funder: string | null;
   sampledTransactions: number;
+  recentRapidForwarding: boolean;
+  recentDeltas: number[];
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +206,8 @@ function unavailableResult(target: Address, note: string): ClusterAnalysis {
     hubProfile: "Unread",
     hop2Funder: null,
     sampledTransactions: 0,
+    recentRapidForwarding: false,
+    recentDeltas: [],
   };
 }
 
@@ -391,6 +395,11 @@ export async function analyzeClusterTaint(
   const retainedRatio =
     sumIn > BigInt(0) ? Math.max(1 - Number(sumOut) / Number(sumIn), 0) : null;
 
+  // --- Recency-aware sweep velocity ------------------------------------------
+  const recentWindow = deltas.slice(-2);
+  const recentRapidForwarding =
+    recentWindow.length === 2 && recentWindow.every((d) => d <= 120);
+
   // --- Deterministic severity -------------------------------------------------
   const dispenser = funderType.startsWith("Gas-dispenser pattern");
   const aggregator = hubType.startsWith("Consolidation-hub pattern");
@@ -411,6 +420,12 @@ export async function analyzeClusterTaint(
   ) {
     severity = "warning";
     name = "Automated forwarding pattern (measured, unattributed)";
+  } else if (recentRapidForwarding && severity === "none") {
+    severity = "warning";
+    name = "Recent rapid-forwarding state change";
+    notes.push(
+      `Most recent deposits forwarded in ${recentWindow.join("s / ")}s — behavioral state change vs lifetime median (${velocityMedian}s).`,
+    );
   }
 
   if (severity === "none") {
@@ -444,5 +459,7 @@ export async function analyzeClusterTaint(
     hubProfile: hubType,
     hop2Funder,
     sampledTransactions: allTx.length,
+    recentRapidForwarding,
+    recentDeltas: recentWindow,
   };
 }

@@ -66,6 +66,32 @@ export function evaluateRisk(
     };
   }
 
+  // Check for compound compromise: unverified delegation + rapid forwarding
+  const delegateSignal = evidence.find(
+    (e) =>
+      e.id === "EVIDENCE_7702_DELEGATE" &&
+      (e.status === "warning" || e.status === "danger"),
+  );
+  const forwardingSignal = evidence.find(
+    (e) =>
+      e.id === "EVIDENCE_MONEY_TRAIL_CLUSTER" && e.status === "warning",
+  );
+  if (delegateSignal && forwardingSignal) {
+    rules.push({
+      id: "RULE_COMPOUND_COMPROMISE",
+      effect: "high-risk",
+      explanation:
+        "Two independent measured signals corroborate: unverified execution delegation AND rapid deposit forwarding — consistent with an actively compromised wallet.",
+      evidenceIds: [delegateSignal.id, forwardingSignal.id],
+    });
+    return {
+      verdict: "HIGH OBSERVED RISK",
+      summary:
+        "HIGH RISK: Shield measured two independent compromise signals (delegation to unverified code + rapid automated forwarding of deposits). Do not send funds to this address.",
+      rules,
+    };
+  }
+
   if (dangerous.length > 0) {
     rules.push({
       id: "RULE_DANGEROUS_EVIDENCE",

@@ -181,4 +181,33 @@ describe("analyzeClusterTaint (real measurement engine)", () => {
     expect(result.taintSeverity).toBe("warning");
     expect(result.hasTaint).toBe(true);
   });
+
+  it("detects a behavioral state change via recent rapid forwarding despite a slow lifetime median", async () => {
+    // Deliberate delta shape: slow early deposits (200,000s), but latest 2 are fast (90s, 20s)
+    const history = [
+      tx({ from: FUNDER, to: TARGET, value: ETH(1), timeStamp: "1000" }),
+      tx({ from: TARGET, to: HUB, value: ETH(0.5), timeStamp: "201000" }), // delta 200000s
+      tx({ from: "0x1111111111111111111111111111111111111111", to: TARGET, value: ETH(1), timeStamp: "300000" }),
+      tx({ from: TARGET, to: HUB, value: ETH(0.5), timeStamp: "490000" }), // delta 190000s
+      tx({ from: "0x2222222222222222222222222222222222222222", to: TARGET, value: ETH(0.5), timeStamp: "500000" }),
+      tx({ from: TARGET, to: HUB, value: ETH(0.5), timeStamp: "500090" }), // delta 90s
+      tx({ from: "0x3333333333333333333333333333333333333333", to: TARGET, value: ETH(0.5), timeStamp: "600000" }),
+      tx({ from: TARGET, to: HUB, value: ETH(0.5), timeStamp: "600020" }), // delta 20s
+    ];
+
+    vi.stubGlobal("fetch", mockExplorer({
+      [TARGET]: { asc: history, desc: [...history].reverse() },
+      [FUNDER]: { asc: [tx({ from: "0x0000000000000000000000000000000000000001", to: FUNDER, value: ETH(2), timeStamp: "1" })] },
+      [HUB]: { desc: [] },
+    }));
+
+    const result = await analyzeClusterTaint(TARGET as `0x${string}`);
+
+    expect(result.recentRapidForwarding).toBe(true);
+    expect(result.recentDeltas).toEqual([90, 20]);
+    expect(result.taintSeverity).toBe("warning");
+    expect(result.hasTaint).toBe(true);
+    expect(result.clusterTaintName).toBe("Recent rapid-forwarding state change");
+    expect(result.forensicTraceNotes.join(" ")).toContain("behavioral state change");
+  });
 });

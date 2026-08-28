@@ -45,6 +45,17 @@ export const VERIFIED_FACT_CARDS: FactCard[] = [
     ],
   },
   {
+    id: "eip7702-delegation-drain",
+    topic: "EIP-7702 Delegation Phishing & Drain Attacks",
+    keywords: ["7702 drain", "7702 scam", "7702 attack", "delegation drain", "delegate scam", "malicious delegate"],
+    facts: [
+      "An EIP-7702 delegation makes a wallet's account code point at a delegate contract; every subsequent transfer runs the delegate's logic.",
+      "Observed attack pattern (Base, 2026): phishing sites harvest off-chain 7702 authorizations pointing victims at an unverified delegate contract; the wallet stays visibly clean while deposits are swept by delegate code seconds after landing.",
+      "A mass-deployer creator account (thousands of sent transactions) that directly interacts with victim wallets is the measurable fingerprint.",
+      "Defense: before sending to any 7702-delegated wallet, evaluate the DELEGATE contract (verified source? recognized implementation?). Shield does this automatically in EVIDENCE_7702_DELEGATE.",
+    ],
+  },
+  {
     id: "approvals-exposure",
     topic: "Unlimited Token Approvals & Allowance Hygiene",
     keywords: ["approval", "allowance", "unlimited", "permit2", "revoke"],
@@ -54,6 +65,17 @@ export const VERIFIED_FACT_CARDS: FactCard[] = [
       "If an approved contract is vulnerable or upgraded maliciously, an attacker can sweep all approved tokens without user interaction.",
       "Shield audits indexed Approval(address,address,uint256) events on Base Mainnet, flags unlimited permissions, and verifies spender protocol authenticity.",
       "Remediation: Regularly audit allowances and revoke unneeded permissions using tools like revoke.cash or direct approve(spender, 0) calls.",
+    ],
+  },
+  {
+    id: "reading-a-shield-receipt",
+    topic: "How to Read and Cryptographically Verify a Shield Scan Receipt",
+    keywords: ["read receipt", "verify receipt", "receipthash", "coverage", "receipt format"],
+    facts: [
+      "Every receipt lists evidence with status pass / info / warning / danger / unavailable.",
+      "'unavailable' means the check could not run due to missing data or provider downtime — it never counts as a pass.",
+      "receiptHash is SHA-256 over the receipt (minus receiptId and receiptHash fields); recompute to verify the receipt was not altered.",
+      "Coverage (e.g. 7/7 or 9/9) tells you how much of the required security surface was actually checked — read it before trusting a LOW OBSERVED RISK verdict.",
     ],
   },
 ];

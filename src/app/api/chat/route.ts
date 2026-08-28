@@ -65,16 +65,18 @@ export async function POST(request: NextRequest) {
         const factCardPrompt = matchedFactCard
           ? `\nVERIFIED FACT CARD FOR THIS TOPIC (${matchedFactCard.topic}):
 ${matchedFactCard.facts.map((f) => `• ${f}`).join("\n")}
-CRITICAL INSTRUCTION: Base your answer strictly on the fact card above. Do not hallucinate or invent mechanics.\n`
+CRITICAL INSTRUCTION: Follow this FACT CARD; do not add mechanics it does not contain.\n`
           : "";
 
-        const systemPrompt = `You are Shield AI Guardian, an elite Web3 and Base Mainnet security detective. 
-Your goal is to provide accurate, honest, and verifiable on-chain security analysis.
+        const systemPrompt = `You are Shield AI Guardian, an elite Web3 and Base Mainnet security detective.
 
-Output guidelines:
-1. Keep answers under 220 words unless the user explicitly asks for a deep dive. Use bullets.
-2. If asked about an address, base your response strictly on the on-chain context below. Never invent balances or block numbers.
-3. If asked an educational or case study question, explain the real-world mechanics clearly.
+HARD RULES:
+- Never claim the user "said", "asked" or "discussed" anything not present in the provided conversation history.
+- Never correct or reference figures the user did not state.
+- When a scan receipt is attached, cite evidence by ID (e.g., EVIDENCE_7702_DELEGATE, EVIDENCE_MONEY_TRAIL) BEFORE explaining it.
+- If a question is not covered by the receipt or a FACT CARD, say exactly that and stop. No speculation presented as fact.
+- Keep answers under 220 words unless the user explicitly asks for a deep dive. Use bullets.
+- If output is cut off by length, the route appends a visible continuation note — never end mid-sentence silently.
 ${factCardPrompt}
 On-Chain Context:
 ${
@@ -128,7 +130,6 @@ ${
           const finishReason = llmData.choices?.[0]?.finish_reason;
 
           if (reply) {
-            // Clean up any entity escaping
             reply = reply.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
             if (finishReason === "length") {
               reply += `\n\n*(Answer capped for length — say "continue" for the rest.)*`;
@@ -171,11 +172,6 @@ function generateAutonomousSecurityReasoning(userPrompt: string, receipt?: ScanR
   // EIP-7702
   if (prompt.includes("7702") || prompt.includes("delegat") || prompt.includes("account abstraction")) {
     return `⚡ **EIP-7702 NATIVE ACCOUNT ABSTRACTION EXPLAINER:**\n\nEIP-7702 allows standard EOA wallets to execute smart contract code without deploying a separate proxy contract.\n\n• **How it works:** A 23-byte designator (\`0xef0100...\` + 20-byte delegate address) is stored in the account code.\n• **Key Benefits:** 1-Click Batched Transactions (Approve + Swap simultaneously), Session Keys, and Gas Sponsorship via ERC-4337 Paymasters.\n• **Shield's Innovation:** Shield identifies EIP-7702 delegation designators and verifies delegate reputation rather than misclassifying the wallet as a smart contract.`;
-  }
-
-  // Conversational response
-  if (prompt.includes("template") || prompt.includes("who are you") || prompt.includes("what is this")) {
-    return `👋 **I am Shield AI Copilot:**\n\nI am your live cybersecurity detective on Base Mainnet. I analyze on-chain bytecode, 2-hop money trails, token approvals, and sweeper bot velocity to protect you before you transact. Ask me anything about wallet safety or on-chain risks!`;
   }
 
   // Address-specific queries

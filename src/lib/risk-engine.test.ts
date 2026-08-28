@@ -59,12 +59,25 @@ describe("deterministic risk engine", () => {
     expect(result.rules[0]?.id).toBe("RULE_NO_ADVERSE_SIGNALS");
   });
 
-  it("keeps a contract inconclusive when creation evidence is missing", () => {
-    const result = evaluateRisk("contract", [
-      item("EVIDENCE_CONTRACT_VERIFICATION", "pass"),
-      item("EVIDENCE_CONTRACT_CREATION", "unavailable"),
+  it("escalates to HIGH OBSERVED RISK when delegate warning and forwarding warning compound", () => {
+    const result = evaluateRisk("wallet", [
+      item("EVIDENCE_7702_DELEGATE", "warning"),
+      item("EVIDENCE_MONEY_TRAIL_CLUSTER", "warning"),
       item("EVIDENCE_RECENT_ACTIVITY", "info"),
+      item("EVIDENCE_ACTIVE_APPROVALS", "pass"),
     ]);
-    expect(result.verdict).toBe("INSUFFICIENT DATA");
+    expect(result.verdict).toBe("HIGH OBSERVED RISK");
+    expect(result.rules[0]?.id).toBe("RULE_COMPOUND_COMPROMISE");
+  });
+
+  it("keeps a delegated wallet as CAUTION when delegate warning occurs alone without rapid forwarding", () => {
+    const result = evaluateRisk("wallet", [
+      item("EVIDENCE_7702_DELEGATE", "warning"),
+      item("EVIDENCE_MONEY_TRAIL", "pass"),
+      item("EVIDENCE_RECENT_ACTIVITY", "info"),
+      item("EVIDENCE_ACTIVE_APPROVALS", "pass"),
+    ]);
+    expect(result.verdict).toBe("CAUTION");
+    expect(result.rules[0]?.id).toBe("RULE_WARNING_EVIDENCE");
   });
 });
