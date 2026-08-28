@@ -17,9 +17,9 @@ const DEFAULT_GROQ_KEY =
   "";
 
 export async function POST(request: NextRequest) {
-  // Fixed-window rate armor (per-instance serverless)
+  // Fixed-window rate armor (10 requests per minute per IP)
   const ip = clientIp(request);
-  if (!rateLimit(`chat:${ip}`, 20, 60_000)) {
+  if (!rateLimit(`chat:${ip}`, 10, 60_000)) {
     return NextResponse.json(
       { error: "Rate limit reached. Please wait a minute and try again." },
       { status: 429 },

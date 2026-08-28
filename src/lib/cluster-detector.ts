@@ -65,7 +65,9 @@ async function fetchTxList(
   const { sort = "asc", offset = TARGET_WINDOW } = options;
   const apiKey = process.env.BLOCKSCOUT_API_KEY?.trim();
   const baseUrl = apiKey ? PRO_COMPAT_URL : PUBLIC_COMPAT_URL;
+  let lastError: Error | null = null;
 
+  // 1. Try standard compatibility txlist API
   try {
     const url = new URL(baseUrl);
     if (apiKey) {
@@ -83,28 +85,67 @@ async function fetchTxList(
 
     const response = await fetch(url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(3500),
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body = (await response.json()) as {
-      status?: string;
-      message?: string;
-      result?: unknown;
-    };
-    if (body.status !== "1") {
+    if (response.ok) {
+      const body = (await response.json()) as {
+        status?: string;
+        message?: string;
+        result?: unknown;
+      };
+      if (body.status === "1" && Array.isArray(body.result)) {
+        return body.result as IndexedTx[];
+      }
       if (/no transactions found/i.test(body.message ?? "")) return [];
-      throw new Error(
-        typeof body.result === "string"
-          ? body.result
-          : body.message || "explorer rejected request",
-      );
+      if (typeof body.result === "string" && /too many requests/i.test(body.result)) {
+        // Rate limited on compat route; proceed to REST fallback
+      }
+    } else {
+      lastError = new Error(`HTTP ${response.status}`);
     }
-    if (!Array.isArray(body.result)) throw new Error("unexpected shape");
-    return body.result as IndexedTx[];
-  } catch (err) {
-    throw err instanceof Error ? err : new Error("txlist failed");
+  } catch (err: any) {
+    lastError = err instanceof Error ? err : new Error("txlist failed");
   }
+
+  // 2. Fallback to open Blockscout REST API v2
+  try {
+    const restUrl = `https://base.blockscout.com/api/v2/addresses/${address}/transactions`;
+    const response = await fetch(restUrl, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3500),
+    });
+    if (response.ok) {
+      const body = await response.json();
+      if (Array.isArray(body.items)) {
+        const mapped: IndexedTx[] = body.items.map((it: any) => ({
+          hash: it.hash || "",
+          from: it.from?.hash || "",
+          to: it.to?.hash || "",
+          value: it.value || "0",
+          timeStamp: it.timestamp ? String(Math.floor(Date.parse(it.timestamp) / 1000)) : "",
+          isError: it.status === "error" ? "1" : "0",
+          txreceipt_status: it.status === "ok" || it.status === "success" ? "1" : "0",
+          methodId: it.method?.startsWith("0x") ? it.method : "",
+          functionName: it.method || "",
+        }));
+        if (sort === "asc") {
+          mapped.sort((a, b) => Number(a.timeStamp) - Number(b.timeStamp));
+        } else {
+          mapped.sort((a, b) => Number(b.timeStamp) - Number(a.timeStamp));
+        }
+        return mapped.slice(0, offset);
+      }
+    } else {
+      throw new Error(`REST API HTTP ${response.status}`);
+    }
+  } catch (err: any) {
+    if (lastError) throw lastError;
+    throw err instanceof Error ? err : new Error("REST API failed");
+  }
+
+  if (lastError) throw lastError;
+  return [];
 }
 
 const isSuccessful = (tx: IndexedTx): boolean =>
@@ -247,7 +288,7 @@ export async function analyzeClusterTaint(
 
   // Process funder hop
   if (seedFunder) {
-    if (funderHopRes.status === "fulfilled" && Array.isArray(funderHopRes.value)) {
+    if (funderHopRes.status === "fulfilled" && Array.isArray(funderHopRes.value) && funderHopRes.value.length > 0) {
       const funderTxs = funderHopRes.value;
       const funderOutbound = funderTxs.filter(
         (tx) => isSuccessful(tx) && sameAddress(tx.from, seedFunder) && txValue(tx) > BigInt(0),
@@ -271,7 +312,7 @@ export async function analyzeClusterTaint(
 
   // Process hub hop
   if (hub && outbound.length >= 3) {
-    if (hubHopRes.status === "fulfilled" && Array.isArray(hubHopRes.value)) {
+    if (hubHopRes.status === "fulfilled" && Array.isArray(hubHopRes.value) && hubHopRes.value.length > 0) {
       const hubTxs = hubHopRes.value;
       const distinctSources = new Set(
         hubTxs
@@ -319,8 +360,12 @@ export async function analyzeClusterTaint(
   const retainedRatio = sumIn > BigInt(0) ? Math.max(1 - Number(sumOut) / Number(sumIn), 0) : null;
 
   // Recency-aware velocity
+  // Threshold rule: deltas.at(-1) <= 60 || (deltas.slice(-2).length === 2 && deltas.slice(-2).every(d => d <= 120))
   const recentWindow = deltas.slice(-2);
-  const recentRapidForwarding = recentWindow.length === 2 && recentWindow.every((d) => d <= 120);
+  const lastDelta = deltas.length > 0 ? deltas[deltas.length - 1] : undefined;
+  const recentRapidForwarding =
+    (lastDelta !== undefined && lastDelta <= 60) ||
+    (recentWindow.length === 2 && recentWindow.every((d) => d <= 120));
 
   // Severity
   const dispenser = funderType.startsWith("Gas-dispenser pattern");
@@ -341,7 +386,7 @@ export async function analyzeClusterTaint(
     severity = "warning";
     name = "Recent rapid-forwarding state change";
     notes.push(
-      `Most recent deposits forwarded in ${recentWindow.join("s / ")}s (behavioral state change vs lifetime median of ${velocityMedian}s).`,
+      `Most recent deposits forwarded in ${recentWindow.join("s / ")}s (behavioral state change vs lifetime median of ${velocityMedian ?? "N/A"}s).`,
     );
   }
 
