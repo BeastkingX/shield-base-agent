@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
+import Icon from "./Icon";
 
 interface AgentCopilotProps {
   receipt?: ScanReceipt;
@@ -116,28 +117,28 @@ export default function AgentCopilot({
   const approvalsCount = receipt?.approvalsSummary?.totalCount || 0;
   const unlimitedCount = receipt?.approvalsSummary?.unlimitedCount || 0;
 
-  // Default AI Detective Summary (Guarded when no receipt is present)
+  // Default AI Detective Summary
   const defaultSummary = (() => {
     if (!receipt) {
-      return `👋 **Shield AI Security Detective Online:** I explain on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Ask me anything or select a topic.`;
+      return `**Shield AI Security Detective Online:** I explain on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Ask me anything or select a topic.`;
     }
     if (isSweeper) {
-      return `🚨 **CRITICAL HAZARD DETECTED:** Target \`${receipt.address}\` is under an active **sweeper bot compromise**. Any ETH or tokens sent here leave in seconds. **Do not send funds.**`;
+      return `**CRITICAL HAZARD DETECTED:** Target \`${receipt.address}\` is under an active **sweeper bot compromise**. Any ETH or tokens sent here leave in seconds. **Do not send funds.**`;
     }
     if (isTainted) {
-      return `⚠️ **Adversarial cluster taint:** Target \`${receipt.address}\` was funded by a known drainer dispenser (${receipt.clusterAnalysis?.clusterTaintName || "phishing network"}) or forwards proceeds to a malicious vault.`;
+      return `**Adversarial cluster taint:** Target \`${receipt.address}\` was funded by a known drainer dispenser (${receipt.clusterAnalysis?.clusterTaintName || "phishing network"}) or forwards proceeds to a malicious vault.`;
     }
     if (isEip7702) {
-      return `⚡ **Delegated wallet (EIP-7702):** Target \`${receipt.address}\` borrows code from an on-chain helper contract. Indexed **${approvalsCount} active approvals** (${unlimitedCount} unlimited). Clean money trail observed.`;
+      return `**Delegated wallet (EIP-7702):** Target \`${receipt.address}\` borrows code from an on-chain helper contract. Indexed **${approvalsCount} active approvals** (${unlimitedCount} unlimited). Clean money trail observed.`;
     }
     if (receipt.targetType === "contract") {
       const isProxy = receipt.evidence.some((e) => e.id === "EVIDENCE_CONTRACT_VERIFICATION" && e.status === "warning");
       if (isProxy) {
-        return `🔍 **Verified proxy contract:** Target \`${receipt.address}\` is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Implementation logic can be upgraded by owner.`;
+        return `**Verified proxy contract:** Target \`${receipt.address}\` is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Implementation logic can be upgraded by owner.`;
       }
-      return `✅ **Verified smart contract:** Target \`${receipt.address}\` has published source metadata and verified deployment provenance on Base.`;
+      return `**Verified smart contract:** Target \`${receipt.address}\` has published source metadata and verified deployment provenance on Base.`;
     }
-    return `✅ **Standard wallet:** Target \`${receipt.address}\` has no bytecode, clean 1-hop upstream gas funding, and no links to known drainer hubs.`;
+    return `**Standard wallet:** Target \`${receipt.address}\` has no bytecode, clean 1-hop upstream gas funding, and no links to known drainer hubs.`;
   })();
 
   const quickPrompts = receipt
@@ -201,8 +202,8 @@ export default function AgentCopilot({
             id: `agent_${Date.now()}`,
             role: "agent",
             text: receipt
-              ? `🛡️ **Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage?.completed}/${receipt.coverage?.total} checks completed).\n• **Summary:** ${receipt.summary}`
-              : `🛡️ **Shield AI Agent:** Active on Base Mainnet. Ask me any question about wallet security, sweeper bots, or on-chain risks!`,
+              ? `**Shield AI Agent:** Evaluated target \`${receipt.address}\` at Base block #${Number(receipt.blockNumber).toLocaleString()}.\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage?.completed}/${receipt.coverage?.total} checks completed).\n• **Summary:** ${receipt.summary}`
+              : `**Shield AI Agent:** Active on Base Mainnet. Ask me any question about wallet security, sweeper bots, or on-chain risks.`,
             timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           },
         ]);
@@ -213,7 +214,6 @@ export default function AgentCopilot({
     [question, loading, receipt, chatHistory],
   );
 
-  // Auto-trigger question when set from carousel or external trigger
   useEffect(() => {
     if (initialQuestion && initialQuestion.trim()) {
       onOpen();
@@ -222,7 +222,6 @@ export default function AgentCopilot({
     }
   }, [initialQuestion, handleAsk, onOpen, onClearInitialQuestion]);
 
-  // Focus trap & Escape key handler
   useEffect(() => {
     if (!isOpen) return;
 
@@ -245,7 +244,6 @@ export default function AgentCopilot({
     };
   }, [isOpen, onClose]);
 
-  // Auto-scroll chat feed
   useEffect(() => {
     if (isOpen) {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -266,7 +264,7 @@ export default function AgentCopilot({
 
   return (
     <>
-      {/* Floating Dock Launcher Button (always on bottom-right) */}
+      {/* Floating Dock Launcher Button */}
       <button
         ref={launcherButtonRef}
         type="button"
@@ -282,7 +280,7 @@ export default function AgentCopilot({
         aria-expanded={isOpen}
         aria-controls="shield-chat-dock"
       >
-        <span className="dockSparkle" aria-hidden="true">✦</span>
+        <Icon name="bot" size={16} />
         <span className="dockLabel">Ask Shield</span>
         {receipt && <span className="dockContextDot" title="Scan receipt grounded" />}
       </button>
@@ -310,7 +308,9 @@ export default function AgentCopilot({
         {/* Drawer Header */}
         <div className="dockHeader">
           <div className="dockTitleGroup">
-            <div className="dockEmblem">✦</div>
+            <div className="dockEmblem">
+              <Icon name="bot" size={18} />
+            </div>
             <div>
               <div className="dockBadgeRow">
                 <span className="dockBadge">AI Security Detective</span>
@@ -359,7 +359,7 @@ export default function AgentCopilot({
         <div className="dockBody">
           {/* Default Summary Box */}
           <div className="dockSummaryCard">
-            <div className="summaryIcon" aria-hidden="true">🛡️</div>
+            <Icon name="shield" size={20} className="summaryIcon" />
             <div className="summaryText">
               <FormattedMessage text={defaultSummary} />
             </div>
@@ -377,7 +377,7 @@ export default function AgentCopilot({
                     onClick={() => handleCopyMessage(item.id, item.text)}
                     aria-label="Copy message"
                   >
-                    {copiedId === item.id ? "Copied ✓" : "Copy 📋"}
+                    {copiedId === item.id ? "Copied" : "Copy"}
                   </button>
                 )}
               </div>

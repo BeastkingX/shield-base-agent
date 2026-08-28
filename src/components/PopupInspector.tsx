@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { InspectionReceipt } from "@/lib/popup-inspector";
+import Icon from "./Icon";
 
 const DEMO_CLEAN_PERMIT = JSON.stringify(
   {
@@ -32,7 +33,7 @@ const DEMO_RIGGED_PERMIT = JSON.stringify(
     domain: {
       name: "Permit2",
       chainId: 8453,
-      verifyingContract: "0x9999999999999999999999999999999999999bad", // Phishing Lookalike!
+      verifyingContract: "0x9999999999999999999999999999999999999bad",
     },
     primaryType: "PermitSingle",
     message: {
@@ -113,7 +114,7 @@ export default function PopupInspector() {
       <div className="inspectorHeader">
         <div>
           <div className="eyebrow">
-            <span /> Pre-Signing Verification
+            <Icon name="key" size={12} /> Pre-Signing Verification
           </div>
           <h2>Check a Pop-Up or Signature</h2>
           <p className="inspectorSubtitle">
@@ -121,7 +122,7 @@ export default function PopupInspector() {
           </p>
         </div>
         <span className="noLeakTag" role="note">
-          🔒 Leak Guard: Never paste private keys or seed words
+          <Icon name="key" size={13} /> Leak Guard: Never paste private keys or seed words
         </span>
       </div>
 
@@ -138,7 +139,7 @@ export default function PopupInspector() {
                 void handleInspect(DEMO_CLEAN_PERMIT);
               }}
             >
-              🟢 Benign Permit2
+              <Icon name="check" size={12} /> Benign Permit2
             </button>
             <button
               type="button"
@@ -148,7 +149,7 @@ export default function PopupInspector() {
                 void handleInspect(DEMO_RIGGED_PERMIT);
               }}
             >
-              🔴 Rigged Phishing Permit
+              <Icon name="danger" size={12} /> Rigged Phishing Permit
             </button>
           </div>
         </div>
@@ -163,12 +164,12 @@ export default function PopupInspector() {
         />
 
         <div className="inspectorActions">
-          <button type="button" className="ghostBtn" onClick={handlePaste}>
-            📋 Paste from Clipboard
+          <button type="button" className="ghostbtn" onClick={handlePaste}>
+            <Icon name="receipt" size={14} /> Paste from Clipboard
           </button>
           <button
             type="button"
-            className="primaryBtn"
+            className="cta"
             disabled={loading || !payload.trim()}
             onClick={() => handleInspect()}
           >
@@ -192,22 +193,22 @@ export default function PopupInspector() {
         >
           <div className="resultHeadRow">
             <div className="verdictBadgeLarge">
-              <span aria-hidden="true">
-                {result.verdict === "DO NOT SIGN" || result.verdict === "SECURITY WARNING"
-                  ? "🛑"
-                  : result.verdict === "CAUTION (REVIEW)"
-                  ? "⚠️"
-                  : "✅"}
-              </span>
+              {result.verdict === "DO NOT SIGN" || result.verdict === "SECURITY WARNING" ? (
+                <Icon name="danger" size={20} />
+              ) : result.verdict === "CAUTION (REVIEW)" ? (
+                <Icon name="alert" size={20} />
+              ) : (
+                <Icon name="check" size={20} />
+              )}
               <strong>{result.verdict}</strong>
             </div>
-            <div className="inspectionActionsGroup">
-              <button type="button" className="ghostBtn" onClick={downloadReceipt}>
+            <div className="inspectionActionsGroup" style={{ display: "flex", gap: "8px" }}>
+              <button type="button" className="ghostbtn" onClick={downloadReceipt}>
                 Download Receipt ↧
               </button>
               <Link
                 href={`/verify?receipt=${encodeURIComponent(JSON.stringify(result))}`}
-                className="ghostBtn"
+                className="ghostbtn"
               >
                 Verify Hash ↗
               </Link>
@@ -225,9 +226,11 @@ export default function PopupInspector() {
               {result.evidence.map((item) => (
                 <div key={item.id} className={`checkCardRow status-${item.status}`}>
                   <div className="checkHeaderLine">
-                    <span className="checkIconBadge" aria-hidden="true">
-                      {item.status === "pass" ? "✓" : item.status === "danger" ? "✕" : "•"}
-                    </span>
+                    <Icon
+                      name={item.status === "pass" ? "check" : item.status === "danger" ? "danger" : "info"}
+                      size={14}
+                      className="checkIconBadge"
+                    />
                     <strong className="checkItemLabel">{item.label}</strong>
                   </div>
                   <p className="checkItemClaim">{item.claim}</p>
@@ -237,15 +240,16 @@ export default function PopupInspector() {
           )}
 
           <div className="hashReceiptFooter">
-            <div className="hashLeft">
+            <div className="hashLeft" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span>Receipt Hash: <code>{result.receiptHash}</code></span>
               <button
                 type="button"
-                className="copyHashInlineBtn"
+                className="ghostbtn"
+                style={{ minHeight: "28px", padding: "2px 8px", fontSize: "11px" }}
                 onClick={handleCopyHash}
                 aria-label="Copy receipt hash"
               >
-                {copiedHash ? "Copied ✓" : "Copy"}
+                {copiedHash ? "Copied" : "Copy"}
               </button>
             </div>
             <span>ID: <code>{result.receiptId}</code></span>

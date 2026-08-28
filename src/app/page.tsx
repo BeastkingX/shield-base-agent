@@ -16,6 +16,8 @@ import ProtectedSendModal from "@/components/ProtectedSendModal";
 import ReportWalletModal from "@/components/ReportWalletModal";
 import AiEducationCarousel from "@/components/AiEducationCarousel";
 import PopupInspector from "@/components/PopupInspector";
+import ShieldLogo from "@/components/ShieldLogo";
+import Icon from "@/components/Icon";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const DEMO_VITALIK = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
@@ -242,7 +244,7 @@ export default function Home() {
         {/* Navigation */}
         <nav aria-label="Primary navigation">
           <a className="brand" href="#top" aria-label="Shield home">
-            <span className="mark">🛡</span>
+            <ShieldLogo size={32} />
             <span>SHIELD</span>
           </a>
 
@@ -256,7 +258,7 @@ export default function Home() {
               }}
               aria-label="Report a malicious address"
             >
-              🚩 Report
+              <Icon name="flag" size={13} /> Report
             </button>
             <a href="#popup-inspector" className="navbtn">
               Check Pop-Up
@@ -276,7 +278,9 @@ export default function Home() {
 
         {/* Hero Section */}
         <header className={`hero ${receipt ? "heroCompact" : ""}`} id="top">
-          <span className="eyebrow">⚡ Evidence-first security on Base</span>
+          <span className="eyebrow">
+            <Icon name="shield" size={12} /> Evidence-first security on Base
+          </span>
           <h1>
             Inspect the address.<br />
             <em>See the evidence.</em>
@@ -349,7 +353,7 @@ export default function Home() {
                   runScan(DEMO_SWEEPER_CAUGHT);
                 }}
               >
-                ⚑ caught live: phishing address <span className="arr">→</span>
+                <Icon name="flag" size={12} /> caught live: phishing address <span className="arr">→</span>
               </button>
             </div>
 
@@ -417,11 +421,16 @@ export default function Home() {
                 <div>
                   <div className="vword">
                     <span className="sig" aria-hidden="true">
-                      {receipt.verdict === "LOW OBSERVED RISK"
-                        ? "✓"
-                        : receipt.verdict === "CAUTION"
-                        ? "⚠️"
-                        : "🚨"}
+                      <Icon
+                        name={
+                          receipt.verdict === "LOW OBSERVED RISK"
+                            ? "check"
+                            : receipt.verdict === "CAUTION"
+                            ? "alert"
+                            : "danger"
+                        }
+                        size={22}
+                      />
                     </span>
                     <span>{receipt.verdict}</span>
                   </div>
@@ -440,7 +449,7 @@ export default function Home() {
                       setShowReportModal(true);
                     }}
                   >
-                    🚩 Report
+                    <Icon name="flag" size={12} /> Report
                   </button>
                   <a
                     href={`https://basescan.org/address/${receipt.address}`}
@@ -457,7 +466,7 @@ export default function Home() {
                       copyText(JSON.stringify(receipt, null, 2), "receipt")
                     }
                   >
-                    {copied === "receipt" ? "Copied JSON ✓" : "Copy JSON"}
+                    {copied === "receipt" ? "Copied JSON" : "Copy JSON"}
                   </button>
                   <button
                     className="ghostbtn"
@@ -505,7 +514,7 @@ export default function Home() {
               </div>
 
               <div className="verify">
-                <span aria-hidden="true">🔏</span>
+                <Icon name="hash" size={14} />
                 <span className="h">
                   receiptHash {receipt.receiptHash ? `${receipt.receiptHash.slice(0, 10)}…${receipt.receiptHash.slice(-6)}` : "Computing…"}
                 </span>
@@ -517,7 +526,7 @@ export default function Home() {
                     style={{ minHeight: "32px", padding: "4px 10px", fontSize: "11.5px" }}
                     onClick={() => copyText(receipt.receiptHash || "", "hash")}
                   >
-                    {copied === "hash" ? "Copied ✓" : "Copy Hash"}
+                    {copied === "hash" ? "Copied" : "Copy Hash"}
                   </button>
                 )}
                 <Link
@@ -570,7 +579,9 @@ export default function Home() {
                 <div
                   className={`herofind ${flagshipFinding.status === "danger" ? "danger" : ""}`}
                 >
-                  <div className="kicker">⚑ Why this verdict</div>
+                  <div className="kicker">
+                    <Icon name="flag" size={11} /> Why this verdict
+                  </div>
                   <div className="title">{flagshipFinding.claim}</div>
                   {flagshipFinding.facts && Object.keys(flagshipFinding.facts).length > 0 && (
                     <div className="detail">
@@ -662,7 +673,9 @@ export default function Home() {
         {/* Methodology Section */}
         <section className="method" id="method" aria-label="Shield Methodology">
           <div className="methodIntro">
-            <span className="eyebrow">⚡ Verifiable Architecture</span>
+            <span className="eyebrow">
+              <Icon name="shield" size={12} /> Verifiable Architecture
+            </span>
             <h2>Not a black-box risk score.</h2>
             <p>
               Shield separates observed on-chain facts, deterministic rules, and known limitations so you can audit how every verdict was produced.
@@ -672,28 +685,28 @@ export default function Home() {
           <div className="steps">
             <article className="stepCard">
               <span className="stepNum">01</span>
-              <div className="stepIcon" aria-hidden="true">⌁</div>
+              <Icon name="scan" size={24} className="stepIcon" />
               <h3>Classify</h3>
               <p>Detect a wallet or contract from bytecode at a specific Base block.</p>
             </article>
 
             <article className="stepCard">
               <span className="stepNum">02</span>
-              <div className="stepIcon" aria-hidden="true">◫</div>
+              <Icon name="receipt" size={24} className="stepIcon" />
               <h3>Collect</h3>
               <p>Read RPC state, verified source metadata, deployment, and recent activity.</p>
             </article>
 
             <article className="stepCard">
               <span className="stepNum">03</span>
-              <div className="stepIcon" aria-hidden="true">◇</div>
+              <Icon name="shield" size={24} className="stepIcon" />
               <h3>Evaluate</h3>
               <p>Apply public, versioned rules. Missing data blocks a low-risk conclusion.</p>
             </article>
 
             <article className="stepCard">
               <span className="stepNum">04</span>
-              <div className="stepIcon" aria-hidden="true">↧</div>
+              <Icon name="key" size={24} className="stepIcon" />
               <h3>Prove</h3>
               <p>Export a receipt with source methods, blocks, facts, and limitations.</p>
             </article>
@@ -722,7 +735,7 @@ export default function Home() {
         <footer className="footerSection" role="contentinfo">
           <div className="footerTopRow">
             <div className="brand">
-              <span className="mark">🛡</span>
+              <ShieldLogo size={28} />
               <span>SHIELD</span>
             </div>
             <p className="footerMotto">Open evidence for verified decisions on Base Mainnet.</p>
@@ -772,7 +785,7 @@ export default function Home() {
           onClick={() => setIsChatDockOpen(true)}
           aria-label="Ask Shield Copilot"
         >
-          ✦ Ask Shield
+          <Icon name="bot" size={16} /> Ask Shield
         </button>
       </div>
 
@@ -793,7 +806,7 @@ export default function Home() {
         onClick={toggleTheme}
         aria-label={`Toggle theme (currently ${theme})`}
       >
-        ◐ Toggle theme
+        <Icon name="theme" size={14} /> Toggle theme
       </button>
 
       {/* Modals */}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { parseEther, isAddress, getAddress, type Address, type Hex } from "viem";
 import { switchToBase, isBaseChain, type Eip1193Provider } from "@/lib/wallet";
 import type { ScanReceipt, EvidenceItem } from "@/lib/scan-types";
 import { baseClient } from "@/lib/base-client";
 import TokenSelector, { SUPPORTED_BASE_TOKENS, type TokenItem } from "./TokenSelector";
+import Icon from "./Icon";
 
 interface ProtectedSendModalProps {
   isOpen: boolean;
@@ -251,7 +252,8 @@ export default function ProtectedSendModal({
           params: [
             {
               from,
-              to: tokenContractAddr,
+              to,
+              value: tokenContractAddr,
               data,
             },
           ],
@@ -268,11 +270,11 @@ export default function ProtectedSendModal({
 
   return (
     <div className="modalBackdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Protected Send Modal">
-      <div className="modalCard sendModalCard" onClick={(e) => e.stopPropagation()}>
+      <div className="modalCard" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="modalHeader">
           <div className="modalTitleGroup">
-            <span className="modalEmblem" aria-hidden="true">🛡️</span>
+            <Icon name="shield" size={28} className="modalEmblem" />
             <div>
               <div className="modalBadgeRow">
                 <h3>Protected Send</h3>
@@ -347,7 +349,7 @@ export default function ProtectedSendModal({
 
             {isInsufficientBalance && (
               <div className="errorBox" role="alert">
-                ⚠️ Insufficient balance: You have {userBalance.toFixed(5)} {selectedToken.symbol}, but entered {amount} {selectedToken.symbol}.
+                Insufficient balance: You have {userBalance.toFixed(5)} {selectedToken.symbol}, but entered {amount} {selectedToken.symbol}.
               </div>
             )}
           </div>
@@ -377,7 +379,7 @@ export default function ProtectedSendModal({
                   </button>
                 ) : (
                   <button type="button" className="ghostTextBtn" onClick={handlePasteRecipient}>
-                    📋 Paste
+                    <Icon name="receipt" size={13} /> Paste
                   </button>
                 )}
               </div>
@@ -397,14 +399,16 @@ export default function ProtectedSendModal({
             <span>Quick test:</span>
             <button
               type="button"
-              className="chipBtn"
+              className="chip"
+              style={{ minHeight: "32px", padding: "4px 10px", fontSize: "11.5px" }}
               onClick={() => setRecipient("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")}
             >
-              vitalik.eth (Safe)
+              vitalik.eth (Review)
             </button>
             <button
               type="button"
-              className="chipBtn"
+              className="chip"
+              style={{ minHeight: "32px", padding: "4px 10px", fontSize: "11.5px" }}
               onClick={() => setRecipient("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")}
             >
               USDC Contract (Proxy)
@@ -425,10 +429,10 @@ export default function ProtectedSendModal({
               <div className="preFlightTop">
                 <span className="preFlightBadge">
                   {isSweeper
-                    ? "🚨 SWEEPER BOT BLOCKED"
+                    ? "SWEEPER BOT BLOCKED"
                     : isBlocked
-                    ? "🛑 HIGH RISK BLOCKED"
-                    : "✅ RECIPIENT VERIFIED"}
+                    ? "HIGH RISK BLOCKED"
+                    : "RECIPIENT VERIFIED"}
                 </span>
                 <span className="preFlightCoverageTag">
                   {recipientScan.coverage.completed}/{recipientScan.coverage.total} checks verified
@@ -453,9 +457,11 @@ export default function ProtectedSendModal({
                   {recipientScan.evidence.map((item: EvidenceItem) => (
                     <div key={item.id} className={`checkCardRow status-${item.status}`}>
                       <div className="checkHeaderLine">
-                        <span className="checkIconBadge" aria-hidden="true">
-                          {item.status === "pass" ? "✓" : item.status === "danger" ? "✕" : "•"}
-                        </span>
+                        <Icon
+                          name={item.status === "pass" ? "check" : item.status === "danger" ? "danger" : "info"}
+                          size={14}
+                          className="checkIconBadge"
+                        />
                         <strong className="checkItemLabel">{item.label}</strong>
                       </div>
                       <p className="checkItemClaim">{item.claim}</p>
@@ -503,7 +509,7 @@ export default function ProtectedSendModal({
 
           {/* Modal Footer Actions */}
           <div className="modalActions">
-            <button type="button" className="ghostBtn" onClick={onClose}>
+            <button type="button" className="ghostbtn" onClick={onClose}>
               Cancel
             </button>
             <button

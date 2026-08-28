@@ -1,44 +1,52 @@
 "use client";
 
 import React from "react";
+import Icon, { type IconName } from "./Icon";
 
 interface AiEducationCarouselProps {
   onSelectQuestion: (question: string) => void;
 }
 
-const SECURITY_QUESTIONS = [
+interface SecurityQuestion {
+  icon: IconName;
+  tag: string;
+  question: string;
+  color: string;
+}
+
+const SECURITY_QUESTIONS: SecurityQuestion[] = [
   {
-    icon: "🤖",
+    icon: "bot",
     tag: "Sweeper Bots",
     question: "What is a Sweeper Bot and how do hackers drain gas in <8 seconds?",
     color: "var(--red)",
   },
   {
-    icon: "⚡",
+    icon: "key",
     tag: "EIP-7702",
     question: "What is EIP-7702 and how does it upgrade wallets on Base?",
     color: "var(--blue-hi)",
   },
   {
-    icon: "🔍",
+    icon: "scan",
     tag: "Case Study",
     question: "How did the $23.75M Ostium hack happen without a smart contract bug?",
     color: "var(--amber)",
   },
   {
-    icon: "🔒",
+    icon: "shield-alert",
     tag: "Approvals",
     question: "Why are unlimited token approvals (uint256.max) dangerous?",
     color: "var(--blue)",
   },
   {
-    icon: "🍯",
+    icon: "alert",
     tag: "Scam Detection",
     question: "How do I recognize a honeypot token or fake airdrop on Base?",
     color: "var(--green)",
   },
   {
-    icon: "🛡️",
+    icon: "link",
     tag: "Money Trail",
     question: "How does Shield's 2-hop traversal catch brand new burner wallets?",
     color: "var(--blue-hi)",
@@ -50,7 +58,7 @@ export default function AiEducationCarousel({ onSelectQuestion }: AiEducationCar
     <section className="educationCarouselSection" aria-label="Interactive Security Questions">
       <div className="carouselHeaderRow">
         <div className="carouselTitleGroup">
-          <span className="sparkleIcon" aria-hidden="true">✨</span>
+          <Icon name="bot" size={16} />
           <span className="carouselHeading">Interactive Security Intelligence</span>
           <span className="carouselSubTag">Click any topic to ask Shield Copilot</span>
         </div>
@@ -68,14 +76,14 @@ export default function AiEducationCarousel({ onSelectQuestion }: AiEducationCar
               aria-label={`Ask AI: ${item.question}`}
             >
               <div className="cardTopLine">
-                <span className="itemIcon" aria-hidden="true">{item.icon}</span>
+                <Icon name={item.icon} size={18} className="itemIcon" />
                 <span
                   className="itemTag"
                   style={{ color: item.color, borderColor: `${item.color}40` }}
                 >
                   {item.tag}
                 </span>
-                <span className="askArrow" aria-hidden="true">Ask ↗</span>
+                <span className="askArrow" aria-hidden="true">Ask →</span>
               </div>
               <p className="cardQuestion">{item.question}</p>
             </button>
@@ -92,14 +100,14 @@ export default function AiEducationCarousel({ onSelectQuestion }: AiEducationCar
               tabIndex={-1}
             >
               <div className="cardTopLine">
-                <span className="itemIcon" aria-hidden="true">{item.icon}</span>
+                <Icon name={item.icon} size={18} className="itemIcon" />
                 <span
                   className="itemTag"
                   style={{ color: item.color, borderColor: `${item.color}40` }}
                 >
                   {item.tag}
                 </span>
-                <span className="askArrow" aria-hidden="true">Ask ↗</span>
+                <span className="askArrow" aria-hidden="true">Ask →</span>
               </div>
               <p className="cardQuestion">{item.question}</p>
             </button>

@@ -5,9 +5,6 @@
 
 :root {
   --radius: 18px;
-  --font-display: var(--font-display), "Space Grotesk", system-ui, sans-serif;
-  --font-body: var(--font-body), Inter, system-ui, sans-serif;
-  --font-mono: var(--font-mono), "Geist Mono", ui-monospace, Menlo, monospace;
 
   /* Light Theme (Default fallback & [data-theme="light"]) */
   --bg: #f5f8ff;
@@ -74,7 +71,7 @@ html {
 }
 
 body {
-  font-family: var(--font-body);
+  font-family: var(--font-body), Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--ink);
   min-height: 100vh;
@@ -85,8 +82,8 @@ body {
   line-height: 1.55;
 }
 
-h1, h2, h3, .brand, .vword, .herofind .title {
-  font-family: var(--font-display);
+h1, h2, h3, h4, .brand, .vword, .herofind .title, .claim {
+  font-family: var(--font-display), "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
   letter-spacing: -0.02em;
   font-weight: 700;
 }
@@ -104,8 +101,8 @@ a {
   text-decoration: none;
 }
 
-code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow .v, .navpill, .etag, .versionTag {
-  font-family: var(--font-mono);
+code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow .v, .navpill, .etag, .versionTag, .hashValue {
+  font-family: var(--font-mono), "Geist Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
   overflow-wrap: anywhere;
 }
 
@@ -147,7 +144,189 @@ code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow
 .canvas {
   background: var(--heroGlow);
   padding: 0 18px 60px;
+  padding-bottom: max(60px, calc(40px + env(safe-area-inset-bottom, 0px)));
   min-height: 100vh;
+}
+
+.icon {
+  width: 1.15em;
+  height: 1.15em;
+  stroke-width: 2;
+  vertical-align: -0.15em;
+  fill: none;
+  stroke: currentColor;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Key-Value Row Contract (.kvRow) for Wallet Profiles & Metadata
+   ========================================================================== */
+
+.healthKvBlock {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kvRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.kvRow:last-child {
+  border-bottom: none;
+}
+.kvRow .k {
+  color: var(--muted);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.kvRow .v {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  color: var(--ink);
+}
+.kvRow .vDanger { color: var(--red); }
+.kvRow .vWarn { color: var(--amber); }
+.kvRow .vSafe { color: var(--green); }
+.kvIcon {
+  color: var(--faint);
+}
+
+.walletHealthCard {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.healthTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.healthIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.healthAvatarWrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--blueglow);
+  color: var(--blue-hi);
+  display: grid;
+  place-items: center;
+}
+.healthLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.healthBadge {
+  font-size: 10.5px;
+  font-weight: 850;
+  text-transform: uppercase;
+  color: var(--blue-hi);
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+}
+.healthBlock {
+  font-size: 11.5px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+.healthIdentity h3 {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.reputationScoreBox {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.scoreNumber {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.scoreValue {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--green);
+  font-family: var(--font-mono);
+}
+.scoreMax {
+  font-size: 13px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+}
+.scoreMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scoreMeta strong {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.scoreMeta span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.scoreSubNote {
+  font-size: 10px;
+  color: var(--faint);
+}
+.healthActionsStrip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.healthTip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 580px;
+}
+.healthTip p { margin: 0; }
+.healthBtnGroup {
+  display: flex;
+  gap: 8px;
 }
 
 .wrap {
@@ -893,7 +1072,7 @@ details[open] > summary .chev {
 .dock {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  bottom: max(22px, calc(16px + env(safe-area-inset-bottom, 0px)));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -928,7 +1107,7 @@ details[open] > summary .chev {
 .themeToggle {
   position: fixed;
   left: 22px;
-  bottom: 22px;
+  bottom: max(22px, calc(16px + env(safe-area-inset-bottom, 0px)));
   border: 1px solid var(--line-strong);
   background: var(--card-solid);
   color: var(--ink);

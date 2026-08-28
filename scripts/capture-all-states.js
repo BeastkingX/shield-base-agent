@@ -43,9 +43,9 @@ async function run() {
 
       // 2. Scan Real Incident Target (0x69620a2e27af4849bce5f70126ba1fc474c0e4a0)
       await page.fill("#address", INCIDENT_TARGET);
-      await page.click(".cta");
-      await page.waitForSelector(".verdict-high-observed-risk", { timeout: 25000 });
-      await page.waitForTimeout(600);
+      await page.click("button.cta");
+      await page.waitForSelector(".verdict", { timeout: 35000 });
+      await page.waitForTimeout(1000);
 
       // Verdict Banner
       await page.screenshot({
@@ -63,7 +63,7 @@ async function run() {
             window.scrollTo({ top: y, behavior: "instant" });
           }
         });
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(500);
 
         await page.screenshot({
           path: path.join(SCREENSHOT_DIR, `${vp.name}-${theme}-03-evidence-trail.png`),
@@ -74,7 +74,7 @@ async function run() {
         const firstRow = await page.$(".evi details summary");
         if (firstRow) {
           await firstRow.click();
-          await page.waitForTimeout(300);
+          await page.waitForTimeout(400);
         }
         await page.screenshot({
           path: path.join(SCREENSHOT_DIR, `${vp.name}-${theme}-03b-evidence-expanded.png`),

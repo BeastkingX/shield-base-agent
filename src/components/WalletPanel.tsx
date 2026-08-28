@@ -214,7 +214,7 @@ export default function WalletPanel({
           className="walletSendPill"
           onClick={() => onOpenSendModal?.()}
         >
-          🛡️ Protected Send
+          Protected Send →
         </button>
         <button
           type="button"

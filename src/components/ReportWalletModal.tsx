@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { isAddress } from "viem";
+import Icon, { type IconName } from "./Icon";
 
 interface ReportWalletModalProps {
   isOpen: boolean;
@@ -10,40 +11,47 @@ interface ReportWalletModalProps {
   reporterAddress?: string | null;
 }
 
-const SCAM_TEMPLATES = [
+interface ScamTemplate {
+  id: string;
+  icon: IconName;
+  label: string;
+  desc: string;
+}
+
+const SCAM_TEMPLATES: ScamTemplate[] = [
   {
     id: "drainer",
-    icon: "🚨",
+    icon: "danger",
     label: "Permit / Sweeper Drainer",
     desc: "Malicious contract draining tokens or ETH immediately upon deposit.",
   },
   {
     id: "phishing",
-    icon: "🎣",
+    icon: "flag",
     label: "Phishing dApp / Impersonator",
     desc: "Fake website or social account impersonating an official protocol.",
   },
   {
     id: "honeypot",
-    icon: "🍯",
+    icon: "alert",
     label: "Honeypot / Fake Token",
     desc: "Token that cannot be sold (100% tax or transfer disabled).",
   },
   {
     id: "airdrop_scam",
-    icon: "🎁",
-    label: "Fake Airdrop / Claim Voucher",
+    icon: "coins",
+    label: "Fake Airdrop / Voucher",
     desc: "Spam token prompting victims to sign malicious approvals.",
   },
   {
     id: "rugpull",
-    icon: "📉",
+    icon: "shield-alert",
     label: "Rug Pull / Liquidity Drain",
     desc: "Creator drained liquidity pool or minted unbacked tokens.",
   },
   {
     id: "compromised_key",
-    icon: "🔑",
+    icon: "key",
     label: "Compromised Private Key",
     desc: "Account key was leaked and is actively abused by sweeper bots.",
   },
@@ -116,10 +124,10 @@ export default function ReportWalletModal({
 
   return (
     <div className="modalBackdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Report Malicious Address">
-      <div className="modalCard reportModalCard" onClick={(e) => e.stopPropagation()}>
+      <div className="modalCard" onClick={(e) => e.stopPropagation()}>
         <div className="modalHeader">
           <div className="modalTitleGroup">
-            <span className="modalEmblem dangerEmblem" aria-hidden="true">🚩</span>
+            <Icon name="flag" size={24} className="modalEmblem" style={{ color: "var(--red)" }} />
             <div>
               <h3>Report Suspicious Address</h3>
               <p className="modalSubtitle">
@@ -133,15 +141,16 @@ export default function ReportWalletModal({
         </div>
 
         {success ? (
-          <div className="reportSuccessCard" role="status">
-            <span className="successIcon" aria-hidden="true">✅</span>
+          <div className="reportSuccessCard" role="status" style={{ textAlign: "center", padding: "24px 0" }}>
+            <Icon name="check" size={36} style={{ color: "var(--green)", margin: "0 auto 12px" }} />
             <h4>Report Recorded</h4>
             <p>
               Thank you for keeping Base secure. Shield has registered this threat submission into the review watchlist.
             </p>
             <button
               type="button"
-              className="primaryBtn"
+              className="cta"
+              style={{ marginTop: "16px" }}
               onClick={() => {
                 setSuccess(false);
                 onClose();
@@ -151,7 +160,7 @@ export default function ReportWalletModal({
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="reportForm">
+          <form onSubmit={handleSubmit} className="reportForm" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             <div className="formGroup">
               <label htmlFor="reportedAddress">Target Address to Report (0x...)</label>
               <input
@@ -166,7 +175,7 @@ export default function ReportWalletModal({
 
             <div className="formGroup">
               <label>Threat Category</label>
-              <div className="templatesGrid">
+              <div className="templatesGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                 {SCAM_TEMPLATES.map((tpl) => (
                   <button
                     key={tpl.id}
@@ -174,7 +183,7 @@ export default function ReportWalletModal({
                     className={`templatePill ${selectedTemplate === tpl.id ? "templateActive" : ""}`}
                     onClick={() => setSelectedTemplate(tpl.id)}
                   >
-                    <span className="tplIcon" aria-hidden="true">{tpl.icon}</span>
+                    <Icon name={tpl.icon} size={14} className="tplIcon" />
                     <span className="tplLabel">{tpl.label}</span>
                   </button>
                 ))}
@@ -206,15 +215,16 @@ export default function ReportWalletModal({
             {error && <div className="errorBox" role="alert">{error}</div>}
 
             <div className="modalActions">
-              <button type="button" className="ghostBtn" onClick={onClose}>
+              <button type="button" className="ghostbtn" onClick={onClose}>
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting || !targetAddress.trim()}
-                className="reportSubmitBtn"
+                className="cta"
+                style={{ background: "var(--red)", boxShadow: "0 4px 16px rgba(225, 29, 72, 0.3)" }}
               >
-                {submitting ? "Submitting…" : "Submit Threat Report 🚩"}
+                {submitting ? "Submitting…" : "Submit Threat Report"}
               </button>
             </div>
           </form>

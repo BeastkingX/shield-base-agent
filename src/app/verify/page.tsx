@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ShieldLogo from "@/components/ShieldLogo";
+import Icon from "@/components/Icon";
 import { verifyReceiptBrowser, type VerificationResult } from "@/lib/verify-receipt";
 
 const SAMPLE_EOA_RECEIPT = {
@@ -57,7 +58,7 @@ const SAMPLE_INSPECT_RECEIPT = {
 
 const SAMPLE_TAMPERED_RECEIPT = {
   receiptId: "shield_attack_example",
-  receiptHash: "0x3b89ef7b5a1b559792138ad26cf8d4bb92b5e28328bf3d0fb0c3dbe7cf7cf4f8", // Original hash of authentic receipt
+  receiptHash: "0x3b89ef7b5a1b559792138ad26cf8d4bb92b5e28328bf3d0fb0c3dbe7cf7cf4f8",
   receiptVersion: "0.1",
   riskEngineVersion: "0.3.0",
   network: "Base Mainnet",
@@ -67,7 +68,7 @@ const SAMPLE_TAMPERED_RECEIPT = {
   blockNumber: "28450123",
   blockTimestamp: "2026-08-28T02:00:00.000Z",
   scannedAt: "2026-08-28T02:00:01.000Z",
-  verdict: "LOW OBSERVED RISK", // Attacker manipulated verdict from HIGH OBSERVED RISK
+  verdict: "LOW OBSERVED RISK",
   summary: "Attacker manipulated receipt content to fake a clean verdict.",
   coverage: { completed: 6, unavailable: 0, total: 6 },
   evidence: [],
@@ -83,10 +84,10 @@ function VerifyContent() {
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
-    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const isDark = document.documentElement.getAttribute("data-theme") !== "light";
     setTheme(isDark ? "dark" : "light");
   }, []);
 
@@ -138,226 +139,229 @@ function VerifyContent() {
 
   return (
     <main className="verifyPageMain">
-      <nav className="nav shell" aria-label="Verification navigation">
+      <nav aria-label="Verification navigation" className="navlinks" style={{ justifyContent: "space-between", padding: "18px 20px" }}>
         <Link className="brand" href="/" aria-label="Shield home">
           <ShieldLogo size={32} />
-          <span>SHIELD <span className="subBrand">/ VERIFY</span></span>
+          <span>SHIELD <span className="subBrand" style={{ fontSize: "11px", color: "var(--blue-hi)" }}>/ VERIFY</span></span>
         </Link>
-        <div className="navRight">
-          <Link href="/" className="backLink">
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Link href="/" className="navbtn">
             ← Back to Scanner
           </Link>
           <button
             type="button"
-            className="themeToggleBtn"
+            className="navbtn"
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
           >
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+            <Icon name="theme" size={14} /> {theme === "dark" ? "Light" : "Dark"}
           </button>
         </div>
       </nav>
 
-      <div className="shell verifyShell">
-        <header className="verifyHeader">
-          <div className="eyebrow">
-            <span /> Cryptographic Evidence Auditor
-          </div>
-          <h1>Independent Receipt Verification</h1>
-          <p className="verifySubtitle">
-            Shield receipts are cryptographically signed with a SHA-256 content digest.
-            Paste any receipt JSON below to re-hash and prove zero data tampering in your browser.
-          </p>
-        </header>
+      <div className="canvas">
+        <div className="wrap verifyShell">
+          <header className="verifyHeader">
+            <span className="eyebrow">
+              <Icon name="hash" size={12} /> Cryptographic Evidence Auditor
+            </span>
+            <h1>Independent Receipt Verification</h1>
+            <p className="verifySubtitle">
+              Shield receipts are cryptographically signed with a SHA-256 content digest.
+              Paste any receipt JSON below to re-hash and prove zero data tampering in your browser.
+            </p>
+          </header>
 
-        <section className="verifyConsoleSection">
-          <div className="verifyInputCard">
-            <div className="verifyCardTop">
-              <label htmlFor="receiptJson">Paste Shield Receipt JSON</label>
-              <div className="sampleButtonsGroup">
-                <span>Load Sample:</span>
-                <button
-                  type="button"
-                  className="samplePill"
-                  onClick={() => {
-                    const text = JSON.stringify(SAMPLE_EOA_RECEIPT, null, 2);
-                    setJsonInput(text);
-                    void runVerification(text);
-                  }}
-                >
-                  🟢 Authentic EOA
-                </button>
-                <button
-                  type="button"
-                  className="samplePill"
-                  onClick={() => {
-                    const text = JSON.stringify(SAMPLE_INSPECT_RECEIPT, null, 2);
-                    setJsonInput(text);
-                    void runVerification(text);
-                  }}
-                >
-                  ⚡ Permit2 Inspection
-                </button>
-                <button
-                  type="button"
-                  className="samplePill samplePillDanger"
-                  onClick={() => {
-                    const text = JSON.stringify(SAMPLE_TAMPERED_RECEIPT, null, 2);
-                    setJsonInput(text);
-                    void runVerification(text);
-                  }}
-                >
-                  🔴 Tampered Test
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              id="receiptJson"
-              rows={9}
-              value={jsonInput}
-              onChange={(e) => {
-                setJsonInput(e.target.value);
-                void runVerification(e.target.value);
-              }}
-              placeholder='Paste JSON receipt here (e.g. { "receiptId": "shield_...", "receiptHash": "0x...", ... })'
-              spellCheck={false}
-            />
-
-            <div className="verifyActionRow">
-              <button
-                type="button"
-                className="pasteHelperBtn"
-                onClick={async () => {
-                  try {
-                    const text = await navigator.clipboard.readText();
-                    if (text) {
-                      setJsonInput(text);
-                      void runVerification(text);
-                    }
-                  } catch {}
-                }}
-              >
-                📋 Paste from Clipboard
-              </button>
-              <button
-                type="button"
-                className="verifyPrimaryBtn"
-                disabled={verifying || !jsonInput.trim()}
-                onClick={() => runVerification(jsonInput)}
-              >
-                {verifying ? "Computing SHA-256..." : "Recompute & Verify Hash"}
-              </button>
-            </div>
-          </div>
-
-          {result && (
-            <div
-              className={`verificationResultBanner ${
-                result.valid ? "resultMatch" : "resultMismatch"
-              }`}
-              role="status"
-              aria-live="polite"
-            >
-              <div className="resultTopline">
-                <div className="resultIconBadge">
-                  {result.valid ? "✓" : "✕"}
-                </div>
-                <div className="resultHeadText">
-                  <h3>
-                    {result.valid
-                      ? "CRYPTOGRAPHICALLY AUTHENTIC & UNTAMPERED"
-                      : "HASH MISMATCH: TAMPERED RECEIPT DETECTED"}
-                  </h3>
-                  <p>
-                    {result.valid
-                      ? "The client-side SHA-256 digest computed across all facts matches the exact receipt hash."
-                      : result.error ||
-                        "The computed SHA-256 digest does not match the receipt hash. One or more facts in this receipt have been modified."}
-                  </p>
-                </div>
-              </div>
-
-              <div className="hashComparisonGrid">
-                <div className="hashBox">
-                  <span className="hashLabel">Claimed Receipt Hash:</span>
-                  <code className="hashValue">
-                    {result.expectedHash || "None provided"}
-                  </code>
-                </div>
-                <div className="hashBox">
-                  <span className="hashLabel">Computed SHA-256 (WebCrypto):</span>
-                  <code className="hashValue">
-                    {result.computedHash || "Calculation failed"}
-                  </code>
-                </div>
-              </div>
-
-              {result.valid && (
-                <div className="receiptMetadataRow">
-                  {result.target && (
-                    <div>
-                      <span>Target:</span>
-                      <strong>{result.target}</strong>
-                    </div>
-                  )}
-                  {result.verdict && (
-                    <div>
-                      <span>Verdict:</span>
-                      <strong className="verdictTag">{result.verdict}</strong>
-                    </div>
-                  )}
-                  {result.blockNumber && (
-                    <div>
-                      <span>Base Block:</span>
-                      <strong>#{Number(result.blockNumber).toLocaleString()}</strong>
-                    </div>
-                  )}
-                  {result.timestamp && (
-                    <div>
-                      <span>Scanned At:</span>
-                      <strong>{new Date(result.timestamp).toLocaleString()}</strong>
-                    </div>
-                  )}
+          <section className="verifyConsoleSection">
+            <div className="verifyInputCard">
+              <div className="verifyCardTop">
+                <label htmlFor="receiptJson">Paste Shield Receipt JSON</label>
+                <div className="sampleButtonsGroup">
+                  <span>Load Sample:</span>
                   <button
                     type="button"
-                    className="copyHashBtn"
-                    onClick={() => handleCopyHash(result.computedHash)}
+                    className="samplePill"
+                    onClick={() => {
+                      const text = JSON.stringify(SAMPLE_EOA_RECEIPT, null, 2);
+                      setJsonInput(text);
+                      void runVerification(text);
+                    }}
                   >
-                    {copied ? "Copied ✓" : "Copy Hash 📋"}
+                    <Icon name="check" size={11} /> Authentic EOA
+                  </button>
+                  <button
+                    type="button"
+                    className="samplePill"
+                    onClick={() => {
+                      const text = JSON.stringify(SAMPLE_INSPECT_RECEIPT, null, 2);
+                      setJsonInput(text);
+                      void runVerification(text);
+                    }}
+                  >
+                    <Icon name="key" size={11} /> Permit2 Inspection
+                  </button>
+                  <button
+                    type="button"
+                    className="samplePill samplePillDanger"
+                    onClick={() => {
+                      const text = JSON.stringify(SAMPLE_TAMPERED_RECEIPT, null, 2);
+                      setJsonInput(text);
+                      void runVerification(text);
+                    }}
+                  >
+                    <Icon name="danger" size={11} /> Tampered Test
                   </button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
 
-          <div className="verifyMethodCard">
-            <h4>How Shield Verifiability Works</h4>
-            <div className="verifyMethodSteps">
-              <div className="methodStep">
-                <span className="stepNum">1</span>
-                <div>
-                  <strong>Canonical JSON Stripping</strong>
-                  <p>Shield removes the dynamic receipt ID and previous hash wrapper from the payload.</p>
-                </div>
+              <textarea
+                id="receiptJson"
+                rows={9}
+                value={jsonInput}
+                onChange={(e) => {
+                  setJsonInput(e.target.value);
+                  void runVerification(e.target.value);
+                }}
+                placeholder='Paste JSON receipt here (e.g. { "receiptId": "shield_...", "receiptHash": "0x...", ... })'
+                spellCheck={false}
+              />
+
+              <div className="verifyActionRow">
+                <button
+                  type="button"
+                  className="ghostbtn"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text) {
+                        setJsonInput(text);
+                        void runVerification(text);
+                      }
+                    } catch {}
+                  }}
+                >
+                  <Icon name="receipt" size={13} /> Paste from Clipboard
+                </button>
+                <button
+                  type="button"
+                  className="cta"
+                  disabled={verifying || !jsonInput.trim()}
+                  onClick={() => runVerification(jsonInput)}
+                >
+                  {verifying ? "Computing SHA-256..." : "Recompute & Verify Hash →"}
+                </button>
               </div>
-              <div className="methodStep">
-                <span className="stepNum">2</span>
-                <div>
-                  <strong>Hardware SHA-256 Execution</strong>
-                  <p>Your browser executes standard W3C WebCrypto `crypto.subtle.digest(&quot;SHA-256&quot;)`, independent of any server.</p>
+            </div>
+
+            {result && (
+              <div
+                className={`verificationResultBanner ${
+                  result.valid ? "resultMatch" : "resultMismatch"
+                }`}
+                role="status"
+                aria-live="polite"
+              >
+                <div className="resultTopline">
+                  <div className="resultIconBadge">
+                    <Icon name={result.valid ? "check" : "danger"} size={22} />
+                  </div>
+                  <div className="resultHeadText">
+                    <h3>
+                      {result.valid
+                        ? "CRYPTOGRAPHICALLY AUTHENTIC & UNTAMPERED"
+                        : "HASH MISMATCH: TAMPERED RECEIPT DETECTED"}
+                    </h3>
+                    <p>
+                      {result.valid
+                        ? "The client-side SHA-256 digest computed across all facts matches the exact receipt hash."
+                        : result.error ||
+                          "The computed SHA-256 digest does not match the receipt hash. One or more facts in this receipt have been modified."}
+                    </p>
+                  </div>
                 </div>
+
+                <div className="hashComparisonGrid">
+                  <div className="hashBox">
+                    <span className="hashLabel">Claimed Receipt Hash:</span>
+                    <code className="hashValue">
+                      {result.expectedHash || "None provided"}
+                    </code>
+                  </div>
+                  <div className="hashBox">
+                    <span className="hashLabel">Computed SHA-256 (WebCrypto):</span>
+                    <code className="hashValue">
+                      {result.computedHash || "Calculation failed"}
+                    </code>
+                  </div>
+                </div>
+
+                {result.valid && (
+                  <div className="receiptMetadataRow">
+                    {result.target && (
+                      <div>
+                        <span>Target:</span>
+                        <strong>{result.target}</strong>
+                      </div>
+                    )}
+                    {result.verdict && (
+                      <div>
+                        <span>Verdict:</span>
+                        <strong className="verdictTag">{result.verdict}</strong>
+                      </div>
+                    )}
+                    {result.blockNumber && (
+                      <div>
+                        <span>Base Block:</span>
+                        <strong>#{Number(result.blockNumber).toLocaleString()}</strong>
+                      </div>
+                    )}
+                    {result.timestamp && (
+                      <div>
+                        <span>Scanned At:</span>
+                        <strong>{new Date(result.timestamp).toLocaleString()}</strong>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="ghostbtn"
+                      style={{ minHeight: "30px", padding: "2px 8px", fontSize: "11px", marginLeft: "auto" }}
+                      onClick={() => handleCopyHash(result.computedHash)}
+                    >
+                      {copied ? "Copied" : "Copy Hash"}
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="methodStep">
-                <span className="stepNum">3</span>
-                <div>
-                  <strong>Deterministic Integrity Check</strong>
-                  <p>If even a single byte, block number, or balance digit is altered, the entire SHA-256 changes.</p>
+            )}
+
+            <div className="verifyMethodCard">
+              <h4>How Shield Verifiability Works</h4>
+              <div className="verifyMethodSteps">
+                <div className="methodStep">
+                  <span className="stepNum">1</span>
+                  <div>
+                    <strong>Canonical JSON Stripping</strong>
+                    <p>Shield removes the dynamic receipt ID and previous hash wrapper from the payload.</p>
+                  </div>
+                </div>
+                <div className="methodStep">
+                  <span className="stepNum">2</span>
+                  <div>
+                    <strong>Hardware SHA-256 Execution</strong>
+                    <p>Your browser executes standard W3C WebCrypto `crypto.subtle.digest(&quot;SHA-256&quot;)`, independent of any server.</p>
+                  </div>
+                </div>
+                <div className="methodStep">
+                  <span className="stepNum">3</span>
+                  <div>
+                    <strong>Deterministic Integrity Check</strong>
+                    <p>If even a single byte, block number, or balance digit is altered, the entire SHA-256 changes.</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   );
