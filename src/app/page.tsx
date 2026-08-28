@@ -260,7 +260,7 @@ export default function Home() {
             <em>See the evidence.</em>
           </h1>
           <p className="sub">
-            Wallets, contracts, and sign-requests — checked against live chain data and measured fund flows. Every verdict ships with a receipt you can verify yourself.
+            Wallets, contracts, and sign-requests, checked against live chain data and measured fund flows. Every verdict ships with a receipt you can verify yourself.
           </p>
 
           <form className="panel" onSubmit={handleSubmit} aria-label="Scan an address">
@@ -487,7 +487,7 @@ export default function Home() {
                 <span className="h">
                   receiptHash {receipt.receiptHash ? `${receipt.receiptHash.slice(0, 10)}…${receipt.receiptHash.slice(-6)}` : "Computing…"}
                 </span>
-                <small>— recompute &amp; compare</small>
+                <small>(recompute &amp; compare)</small>
                 {receipt.receiptHash && (
                   <button
                     type="button"
@@ -631,7 +631,7 @@ export default function Home() {
                 <small>Etherscan v2 source + Blockscout open indexer active</small>
               </p>
             </div>
-            <p className="providerNotice">Provider failures become explicit unavailable evidence — never passed checks.</p>
+            <p className="providerNotice">Provider failures become explicit unavailable evidence, never passed checks.</p>
           </div>
         </section>
 
@@ -642,7 +642,7 @@ export default function Home() {
               <span className="mark">🛡</span>
               <span>SHIELD</span>
             </div>
-            <p className="footerMotto">Open evidence for safer decisions on Base Mainnet.</p>
+            <p className="footerMotto">Open evidence for verified decisions on Base Mainnet.</p>
           </div>
 
           <div className="footerBottomRow">
@@ -682,7 +682,7 @@ export default function Home() {
 
       {/* Floating Chat Dock Launcher (Mockup Exact) */}
       <div className="dock">
-        <span className="docknote">grounded in the receipt — never guesses</span>
+        <span className="docknote">grounded in the receipt (never guesses)</span>
         <button
           className="dockbtn"
           type="button"

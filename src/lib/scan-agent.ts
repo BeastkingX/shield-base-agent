@@ -795,7 +795,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           claim = `CRITICAL: The delegated execution contract ${delegationAddress} is flagged for malicious threat activity (${delegateThreat.value?.dangerHits.join(", ")}).`;
         } else if (!isVerifiedSource && !knownDelegate) {
           delegateStatus = "warning";
-          claim = `This wallet delegates all execution to contract ${delegationAddress}. Its code — not the wallet's — runs on every transfer here. The delegate has no verified source and is not a recognized smart-account implementation; treat the wallet as carrying the risk of that contract.`;
+          claim = `This wallet delegates all execution to contract ${delegationAddress}. Its code (not the wallet's) runs on every transfer here. The delegate has no verified source and is not a recognized smart-account implementation; treat the wallet as carrying the risk of that contract.`;
         }
 
         items.push(
@@ -849,7 +849,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     }
   }
 
-  // Money Trail & Sweep Velocity — measured on every scan
+  // Money Trail & Sweep Velocity, measured on every scan
   if (clusterAnalysis.analysisStatus === "unavailable") {
     items.push(
       evidence(context, {
@@ -943,7 +943,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       evidence(context, {
         id: "EVIDENCE_MONEY_TRAIL",
         category: "history",
-        label: "Money-trail analysis completed — no rapid-forwarding pattern measured",
+        label: "Money-trail analysis completed, no rapid-forwarding pattern measured",
         status: "pass",
         claim: `Shield sampled ${clusterAnalysis.sampledTransactions} transaction(s), identified the seed funder (${clusterAnalysis.seedFunder}), and measured deposit-to-forward timing. No sweeper or cluster pattern was detected in the sampled history.`,
         source: "shield-cluster-traversal",

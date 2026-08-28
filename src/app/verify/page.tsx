@@ -267,7 +267,7 @@ function VerifyContent() {
                   <h3>
                     {result.valid
                       ? "CRYPTOGRAPHICALLY AUTHENTIC & UNTAMPERED"
-                      : "HASH MISMATCH — TAMPERED RECEIPT DETECTED"}
+                      : "HASH MISMATCH: TAMPERED RECEIPT DETECTED"}
                   </h3>
                   <p>
                     {result.valid

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Shield — Evidence-first safety for Base",
+  title: "Shield: Evidence-first safety for Base",
   description:
     "Autonomous on-chain pre-transaction security AI agent and verifiable evidence engine on Base Mainnet (8453).",
 };

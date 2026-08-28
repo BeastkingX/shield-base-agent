@@ -38,7 +38,7 @@ export function evaluateRisk(
     rules.push({
       id: "RULE_COMPROMISED_SWEEPER_DETECTED",
       effect: "high-risk",
-      explanation: "Measured median deposit-to-forward time under 30 seconds across multiple deposits — behavior consistent with an automated sweeper draining a compromised key.",
+      explanation: "Measured median deposit-to-forward time under 30 seconds across multiple deposits, consistent with an automated sweeper draining a compromised key.",
       evidenceIds: [sweeperEvidence.id],
     });
 
@@ -81,7 +81,7 @@ export function evaluateRisk(
       id: "RULE_COMPOUND_COMPROMISE",
       effect: "high-risk",
       explanation:
-        "Two independent measured signals corroborate: unverified execution delegation AND rapid deposit forwarding — consistent with an actively compromised wallet.",
+        "Two independent measured signals corroborate: unverified execution delegation and rapid deposit forwarding, consistent with an actively compromised wallet.",
       evidenceIds: [delegateSignal.id, forwardingSignal.id],
     });
     return {

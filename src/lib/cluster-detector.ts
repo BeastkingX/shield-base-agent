@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 
 /**
- * Shield Cluster Detector v2 — High-Performance Real Measurement Engine.
+ * Shield Cluster Detector v2, High-Performance Real Measurement Engine.
  * Optimizations: Parallel 2-hop traversal, fast timeouts (<4s), zero sequential sleep bottlenecks.
  */
 
@@ -138,16 +138,16 @@ function unavailableResult(target: Address, note: string): ClusterAnalysis {
     hasTaint: false,
     taintSeverity: "none",
     clusterTaintName: null,
-    seedFunder: "Unknown — history unavailable",
-    sweepDestination: "Unknown — history unavailable",
+    seedFunder: "Unknown (history unavailable)",
+    sweepDestination: "Unknown (history unavailable)",
     isSweeperActive: false,
     sweepVelocitySeconds: null,
     forensicTraceNotes: [note],
     moneyTrailGraph: {
-      upstreamFunder: "Unknown — history unavailable",
+      upstreamFunder: "Unknown (history unavailable)",
       funderType: "Unread",
       target,
-      downstreamHub: "Unknown — history unavailable",
+      downstreamHub: "Unknown (history unavailable)",
       hubType: "Unread",
     },
     analysisStatus: "unavailable",
@@ -196,7 +196,7 @@ export async function analyzeClusterTaint(
   });
   const fullHistory = earliest.length < TARGET_WINDOW && gaps.length === 0;
   notes.push(
-    `Sampled ${allTx.length} transaction(s) — ${
+    `Sampled ${allTx.length} transaction(s), ${
       fullHistory ? "covers full indexed history" : "windowed sample view"
     }.`,
   );
@@ -264,7 +264,7 @@ export async function analyzeClusterTaint(
           ? `Gas-dispenser pattern (measured): ${distinctRecipients.size} distinct addresses funded with <=0.0005 ETH each.`
           : `No dispenser pattern measured (${funderOutbound.length} outbound, ${distinctRecipients.size} small-value recipients).`;
     } else {
-      funderType = "Unread — funder history unavailable";
+      funderType = "Unread (funder history unavailable)";
       gaps.push("funder hop unread");
     }
   }
@@ -284,7 +284,7 @@ export async function analyzeClusterTaint(
           : `Top outflow destination (${rankedDestinations[0][1].count}/${outbound.length} sampled outbound); no aggregator pattern.`;
       notes.push(`Dominant outflow hub: ${hub} (${rankedDestinations[0][1].count} of ${outbound.length} outbound transfers).`);
     } else {
-      hubType = "Unread — hub history unavailable";
+      hubType = "Unread (hub history unavailable)";
       gaps.push("hub hop unread");
     }
   }
@@ -309,7 +309,7 @@ export async function analyzeClusterTaint(
     velocityMedian <= SWEEP_THRESHOLD_SECONDS;
   notes.push(
     velocitySamples >= MIN_VELOCITY_SAMPLES
-      ? `Measured deposit-to-forward deltas (s): [${deltas.join(", ")}] — median ${velocityMedian}s over ${velocitySamples} sample(s).`
+      ? `Measured deposit-to-forward deltas (s): [${deltas.join(", ")}], median ${velocityMedian}s over ${velocitySamples} sample(s).`
       : `Too few deposit/forward pairs to measure sweep velocity (${velocitySamples} sample(s)).`,
   );
 
@@ -341,7 +341,7 @@ export async function analyzeClusterTaint(
     severity = "warning";
     name = "Recent rapid-forwarding state change";
     notes.push(
-      `Most recent deposits forwarded in ${recentWindow.join("s / ")}s — behavioral state change vs lifetime median (${velocityMedian}s).`,
+      `Most recent deposits forwarded in ${recentWindow.join("s / ")}s (behavioral state change vs lifetime median of ${velocityMedian}s).`,
     );
   }
 

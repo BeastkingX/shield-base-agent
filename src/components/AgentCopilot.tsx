@@ -119,31 +119,31 @@ export default function AgentCopilot({
   // Default AI Detective Summary (Guarded when no receipt is present)
   const defaultSummary = (() => {
     if (!receipt) {
-      return `👋 **Shield AI Security Detective Online:** I explain on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Ask me anything or select a topic!`;
+      return `👋 **Shield AI Security Detective Online:** I explain on-chain bytecode, 2-hop money trails, mempool sweeper bots, and active token approvals on **Base Mainnet**. Ask me anything or select a topic.`;
     }
     if (isSweeper) {
-      return `🚨 **CRITICAL HAZARD DETECTED:** Target \`${receipt.address}\` is under an active **Sweeper Bot compromise**. Any ETH or tokens sent here will be automatically drained within seconds. **Do NOT send funds.**`;
+      return `🚨 **CRITICAL HAZARD DETECTED:** Target \`${receipt.address}\` is under an active **sweeper bot compromise**. Any ETH or tokens sent here leave in seconds. **Do not send funds.**`;
     }
     if (isTainted) {
-      return `⚠️ **Adversarial Cluster Taint:** Target \`${receipt.address}\` was funded by a known drainer dispenser (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"}) or forwards proceeds to a malicious vault.`;
+      return `⚠️ **Adversarial cluster taint:** Target \`${receipt.address}\` was funded by a known drainer dispenser (${receipt.clusterAnalysis?.clusterTaintName || "phishing network"}) or forwards proceeds to a malicious vault.`;
     }
     if (isEip7702) {
-      return `⚡ **EIP-7702 Delegated Wallet:** Target \`${receipt.address}\` executes smart account logic via an on-chain delegate contract. Indexed **${approvalsCount} active approvals** (${unlimitedCount} unlimited). Clean money-trail observed.`;
+      return `⚡ **Delegated wallet (EIP-7702):** Target \`${receipt.address}\` borrows code from an on-chain helper contract. Indexed **${approvalsCount} active approvals** (${unlimitedCount} unlimited). Clean money trail observed.`;
     }
     if (receipt.targetType === "contract") {
       const isProxy = receipt.evidence.some((e) => e.id === "EVIDENCE_CONTRACT_VERIFICATION" && e.status === "warning");
       if (isProxy) {
-        return `🔍 **Verified Proxy Contract:** Target \`${receipt.address}\` is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Implementation logic can be upgraded by owner.`;
+        return `🔍 **Verified proxy contract:** Target \`${receipt.address}\` is verified on BaseScan and uses an upgradeable proxy architecture (\`FiatTokenProxy\`). Implementation logic can be upgraded by owner.`;
       }
-      return `✅ **Verified Smart Contract:** Target \`${receipt.address}\` has published source metadata and verified deployment provenance on Base.`;
+      return `✅ **Verified smart contract:** Target \`${receipt.address}\` has published source metadata and verified deployment provenance on Base.`;
     }
-    return `✅ **Standard EOA Wallet:** Target \`${receipt.address}\` has no bytecode, clean 1-hop upstream gas funding, and no links to known drainer hubs.`;
+    return `✅ **Standard wallet:** Target \`${receipt.address}\` has no bytecode, clean 1-hop upstream gas funding, and no links to known drainer hubs.`;
   })();
 
   const quickPrompts = receipt
     ? [
-        "Is it safe to send funds here?",
-        "Explain the EIP-7702 delegation",
+        "Are there any red flags here?",
+        "Explain the helper contract delegation",
         "Audit active token approvals",
         "How do I revoke allowances?",
       ]

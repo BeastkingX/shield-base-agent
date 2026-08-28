@@ -65,18 +65,28 @@ export async function POST(request: NextRequest) {
         const factCardPrompt = matchedFactCard
           ? `\nVERIFIED FACT CARD FOR THIS TOPIC (${matchedFactCard.topic}):
 ${matchedFactCard.facts.map((f) => `• ${f}`).join("\n")}
-CRITICAL INSTRUCTION: Follow this FACT CARD; do not add mechanics it does not contain.\n`
+CRITICAL INSTRUCTION: Follow this FACT CARD. Do not invent mechanics it does not contain.\n`
           : "";
 
-        const systemPrompt = `You are Shield AI Guardian, an elite Web3 and Base Mainnet security detective.
+        const systemPrompt = `You are Shield AI, a Web3 safety assistant on Base Mainnet.
+Your job: watch the evidence, explain verdicts, teach users how drains and scams work.
+You write like a calm, sharp friend who happens to be a security engineer. You never write like a marketing page or a research paper.
 
-HARD RULES:
-- Never claim the user "said", "asked" or "discussed" anything not present in the provided conversation history.
-- Never correct or reference figures the user did not state.
-- When a scan receipt is attached, cite evidence by ID (e.g., EVIDENCE_7702_DELEGATE, EVIDENCE_MONEY_TRAIL) BEFORE explaining it.
-- If a question is not covered by the receipt or a FACT CARD, say exactly that and stop. No speculation presented as fact.
-- Keep answers under 220 words unless the user explicitly asks for a deep dive. Use bullets.
-- If output is cut off by length, the route appends a visible continuation note — never end mid-sentence silently.
+THE 10 VOICE LAWS (MANDATORY):
+1. NO EM DASHES (—), EVER. Use a comma, a period, or parentheses.
+2. PLAIN WORDS FIRST. If a 15-year-old wouldn't know the term, translate it on the spot. Say "this wallet takes orders from another contract" before saying "EIP-7702 delegation." Jargon may follow the explanation, never replace it.
+3. SHORT SENTENCES. One idea per sentence. Never use semicolons. Split long thoughts into two sentences.
+4. FACTS OVER ADJECTIVES. "Deposits left in 20 seconds" beats "extremely rapid draining." Numbers, names, block IDs, and evidence IDs are the adjectives.
+5. CITE, THEN EXPLAIN. When a receipt exists, name the evidence ID first (for example, "EVIDENCE_7702_DELEGATE says the delegate is unverified") and then say what that means in normal words.
+6. HONEST LIMITS ARE MANDATORY STYLE. "I don't know", "that check didn't run", "outside this scan" are first-class answers. Never fill gaps with guesswork. Never soften a red flag into comfort or inflate a clean result into a guarantee. THE WORD "SAFE" IS BANNED. Use "no red flags found" or "clean."
+7. NEVER FAKE FAMILIARITY. No "as we discussed", no "you mentioned", unless it is literally in the conversation history.
+8. CALM, HUMAN RHYTHM. Contractions are fine ("it's", "don't"). Light, dry, helpful tone. No hype words (revolutionary, seamless, next-gen). No fear-mongering. No exclamation stacking.
+9. SCANNABLE IN CHAT. Bold the one thing the user must do. Explain only what they asked. Offer depth instead of dumping it.
+10. MATCH THE USER'S REGISTER. Technical question gets a technical answer with a plain translation. Casual question gets casual words. Beginner question gets beginner words.
+
+SELF-CHECK BEFORE OUTPUT:
+Would a careful human security friend say it exactly like this, with only facts I can point to?
+
 ${factCardPrompt}
 On-Chain Context:
 ${
@@ -98,7 +108,7 @@ ${
         clusterAnalysis: receipt.clusterAnalysis,
         approvalsSummary: receipt.approvalsSummary,
       })
-    : "No address currently scanned. Answer general Web3/Base security education questions."
+    : "No address currently scanned. Answer general Web3 and Base security education questions."
 }`;
 
         const res = await fetch(endpoint, {
@@ -130,9 +140,15 @@ ${
           const finishReason = llmData.choices?.[0]?.finish_reason;
 
           if (reply) {
-            reply = reply.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+            // Strip any accidental em dashes or entities
+            reply = reply
+              .replace(/—/g, ", ")
+              .replace(/–/g, ", ")
+              .replace(/&amp;/g, "&")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">");
             if (finishReason === "length") {
-              reply += `\n\n*(Answer capped for length — say "continue" for the rest.)*`;
+              reply += `\n\n*(Answer capped for length. Say "continue" for the rest.)*`;
             }
             return NextResponse.json({ reply });
           }
@@ -142,7 +158,7 @@ ${
       }
     }
 
-    // 2. Autonomous Deterministic Fallback Engine
+    // 2. Autonomous Deterministic Fallback Engine (Strict Shield Voice Rules)
     const reply = generateAutonomousSecurityReasoning(message, receipt);
     return NextResponse.json({ reply });
   } catch (err: any) {
@@ -154,24 +170,24 @@ ${
 }
 
 /**
- * Autonomous Security & Educational Reasoning Engine (Fallback)
+ * Autonomous Security and Educational Reasoning Engine (Strict Shield Voice)
  */
 function generateAutonomousSecurityReasoning(userPrompt: string, receipt?: ScanReceipt): string {
   const prompt = userPrompt.toLowerCase().trim();
 
   // Sweeper Bots
   if (prompt.includes("sweeper") || prompt.includes("compromised key") || prompt.includes("drain gas")) {
-    return `🤖 **HOW SWEEPER BOTS WORK & HOW TO PROTECT YOURSELF:**\n\nWhen a wallet's private key is leaked (e.g. via phishing or malware), attackers install an automated **Sweeper Bot** that monitors the mempool 24/7.\n\n• **The Attack:** The instant gas or tokens arrive, the bot detects the pending deposit and broadcasts an outgoing transfer in the same or next block (<8 seconds), stealing the funds immediately.\n• **How Shield Protects You:** Shield measures inter-block deposit-to-forward delta velocity over indexed history. If an address exhibits automated instant forwarding, Shield flags **🚨 CRITICAL DANGER: Active Sweeper Bot** and blocks the send flow.\n• **Safety Rule:** Never send rescue gas to a compromised wallet via standard transfers.`;
+    return `🤖 **How sweeper bots work:**\n\nA sweeper bot is an automated script. It watches the public mempool day and night for any money sent to a leaked private key.\n\n• **The attack:** When gas or tokens land, the bot sends an outgoing transfer in the next block (<8 seconds). It steals the deposit before you can click a button.\n• **What Shield checks:** Shield measures how fast deposits leave over past transactions. If deposits leave in seconds, Shield flags **CRITICAL DANGER: Active Sweeper Bot**.\n• **Action:** **Do not send rescue gas.** Any deposit will leave in seconds.`;
   }
 
   // Ostium Hack
   if (prompt.includes("ostium") || prompt.includes("oracle") || prompt.includes("forwarder")) {
-    return `🔍 **CASE STUDY: THE $23.75M OSTIUM HACK:**\n\nOn July 15, 2026, perpetuals DEX Ostium lost **$23.75M USDC** from its liquidity vault without any smart-contract code bug!\n\n• **Root Cause:** A compromised off-chain **oracle signer private key** (not a Solidity vulnerability).\n• **The Exploit:** The attacker held a valid signer credential and used the registered \`PriceUpKeep\` forwarder to submit fabricated BTC-USD price reports ($5,000 entry, $60,000 exit in one transaction loop), draining profits from the public OLP liquidity vault.\n• **Why Simulators Failed:** The smart contracts executed valid math based on the signed prices; trader collateral in isolated contracts was untouched.\n• **Key Takeaway:** Protocol security extends beyond Solidity audits to off-chain key management and signer hygiene.`;
+    return `🔍 **Case study: The $23.75M Ostium incident:**\n\nOn July 15, 2026, perpetuals exchange Ostium lost $23.75M USDC from its liquidity pool. There was no smart contract code bug.\n\n• **Root cause:** An attacker stole the private key for an off-chain oracle signer.\n• **The attack:** The attacker had valid signer credentials. They used the registered \`PriceUpKeep\` forwarder to report fake BTC-USD prices ($5,000 entry, $60,000 exit in one transaction). That drained profits from the public OLP liquidity vault.\n• **Key lesson:** Smart contract audits do not protect off-chain keys. If a signer key leaks, math cannot save the pool.`;
   }
 
   // EIP-7702
   if (prompt.includes("7702") || prompt.includes("delegat") || prompt.includes("account abstraction")) {
-    return `⚡ **EIP-7702 NATIVE ACCOUNT ABSTRACTION EXPLAINER:**\n\nEIP-7702 allows standard EOA wallets to execute smart contract code without deploying a separate proxy contract.\n\n• **How it works:** A 23-byte designator (\`0xef0100...\` + 20-byte delegate address) is stored in the account code.\n• **Key Benefits:** 1-Click Batched Transactions (Approve + Swap simultaneously), Session Keys, and Gas Sponsorship via ERC-4337 Paymasters.\n• **Shield's Innovation:** Shield identifies EIP-7702 delegation designators and verifies delegate reputation rather than misclassifying the wallet as a smart contract.`;
+    return `⚡ **What is EIP-7702:**\n\nEIP-7702 lets a normal wallet borrow code from another smart contract without deploying a separate proxy.\n\n• **How it works:** The wallet saves a 23-byte tag pointing to a helper contract. When someone calls the wallet, it runs that helper contract's code in its own account context.\n• **Benefits:** You can batch approve and swap in one click. Apps can sponsor your gas.\n• **The risk:** If the helper contract is unverified or malicious, it can drain incoming funds. Shield checks the helper contract in \`EVIDENCE_7702_DELEGATE\`.`;
   }
 
   // Address-specific queries
@@ -187,8 +203,8 @@ function generateAutonomousSecurityReasoning(userPrompt: string, receipt?: ScanR
     const txCountItem = receipt.evidence.find((e) => e.id === "EVIDENCE_TRANSACTION_COUNT");
     const txCount = (txCountItem?.facts?.["Transaction count"] as number) || 0;
 
-    return `🛡️ **SHIELD DETECTIVE BRIEFING FOR \`${address}\`:**\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed)\n• **Classification:** ${isEip7702 ? "EIP-7702 Delegated Wallet" : receipt.targetType === "contract" ? "Smart Contract" : "Standard EOA"}\n• **Activity:** ${txCount} transactions, ${balanceEth} balance\n• **Security Health:** ${isSweeper ? "🚨 Sweeper Bot Compromise" : isTainted ? `⚠️ ${clusterName}` : "✅ Clean 2-Hop Money Trail"}\n\nAsk me any question about this address or transaction intent!`;
+    return `🛡️ **Shield briefing for \`${address.slice(0, 8)}...${address.slice(-6)}\`:**\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed).\n• **Type:** ${isEip7702 ? "Delegated wallet taking orders from a helper contract" : receipt.targetType === "contract" ? "Smart contract" : "Standard wallet"}.\n• **Activity:** ${txCount} transactions, ${balanceEth} balance at block #${Number(receipt.blockNumber).toLocaleString()}.\n• **Money trail:** ${isSweeper ? "Active sweeper bot detected. Deposits leave in seconds." : isTainted ? `Tainted by ${clusterName}.` : "Clean funding history."}\n• **Approvals:** ${approvalsCount} active token approvals.\n\n**Action:** ${isSweeper || isTainted ? "**Do not send funds.**" : "No red flags found in completed checks. Review evidence before transacting."}`;
   }
 
-  return `🛡️ **SHIELD AI AGENT READY:**\n\nI am actively monitoring Base Mainnet. Ask me any question about wallet safety, approvals, sweeper bots, or transaction verification!`;
+  return `🛡️ **Shield AI Security Detective:**\n\nI watch on-chain evidence on Base Mainnet. Ask me about wallet safety, approvals, sweeper bots, or how any scan verdict was calculated.`;
 }

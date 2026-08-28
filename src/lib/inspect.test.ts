@@ -75,7 +75,7 @@ describe("Pop-Up Signature Inspector", () => {
     });
 
     const result = await inspectSignaturePayload(mismatchedChain);
-    expect(result.verdict).toBe("CAUTION — REVIEW");
+    expect(result.verdict).toBe("CAUTION (REVIEW)");
     expect(result.evidence.some((e) => e.id === "EVIDENCE_CHAIN_MISMATCH" && e.status === "warning")).toBe(true);
   });
 

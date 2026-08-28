@@ -15,7 +15,7 @@ export interface InspectionReceipt {
   receiptId: string;
   receiptHash: string;
   scannedAt: string;
-  verdict: "DO NOT SIGN" | "CAUTION — REVIEW" | "NO RED FLAGS FOUND" | "INCOMPLETE CHECKS" | "SECURITY WARNING";
+  verdict: "DO NOT SIGN" | "CAUTION (REVIEW)" | "NO RED FLAGS FOUND" | "INCOMPLETE CHECKS" | "SECURITY WARNING";
   title: string;
   summary: string;
   details?: string;
@@ -83,7 +83,7 @@ export async function inspectSignaturePayload(rawPayload: string): Promise<Inspe
       scannedAt,
       verdict: "SECURITY WARNING",
       title: "That looks like a private key or seed phrase",
-      summary: "CRITICAL: Never paste private keys or recovery seed words anywhere — including here. Shield operates strictly on-chain and never needs your keys.",
+      summary: "CRITICAL: Never paste private keys or recovery seed words anywhere, including here. Shield operates strictly on-chain and never needs your keys.",
       details: "If you posted this key or seed phrase anywhere public, move your funds immediately from a fresh, newly created wallet.",
       evidence: [
         {
@@ -130,7 +130,7 @@ export async function inspectSignaturePayload(rawPayload: string): Promise<Inspe
     };
   }
 
-  // 3. EIP-712 / JSON PARSER
+  // 3. EIP-7702 / JSON PARSER
   let parsedJson: any = null;
   try {
     parsedJson = JSON.parse(rawPayload);
@@ -159,7 +159,7 @@ export async function inspectSignaturePayload(rawPayload: string): Promise<Inspe
     };
   }
 
-  // Extract EIP-712 Fields
+  // Extract EIP-7702 Fields
   const domain = parsedJson.domain || {};
   const message = parsedJson.message || {};
   const primaryType = parsedJson.primaryType || "Unknown";
@@ -196,7 +196,7 @@ export async function inspectSignaturePayload(rawPayload: string): Promise<Inspe
       id: "EVIDENCE_BLANK_CHECK",
       label: "Unlimited Allowance / Blank Check",
       status: "warning",
-      claim: `Signature grants unlimited permission (uint256.max) to transfer tokens. This is not a claim — it gives ${spender || "the spender"} permission to move your tokens.`,
+      claim: `Signature grants unlimited permission (uint256.max) to transfer tokens. This gives ${spender || "the spender"} permission to move your tokens.`,
       facts: { "Requested Allowance": "Unlimited (type(uint256).max)", "Spender": spender },
     });
   } else {
@@ -292,12 +292,12 @@ export async function inspectSignaturePayload(rawPayload: string): Promise<Inspe
 
   if (hasDanger) {
     verdict = "DO NOT SIGN";
-    title = "DO NOT SIGN — High Security Hazard Detected";
-    summary = "CRITICAL: Shield detected a high-risk security hazard in this signature payload (e.g. spoofed Permit2 address or blacklisted spender). Signing will likely compromise your tokens.";
+    title = "DO NOT SIGN: High Security Hazard Detected";
+    summary = "CRITICAL: Shield detected a high-risk security hazard in this signature payload (such as a spoofed Permit2 address or blacklisted spender). Signing will likely compromise your tokens.";
   } else if (hasWarning) {
-    verdict = "CAUTION — REVIEW";
+    verdict = "CAUTION (REVIEW)";
     title = "Review Parameters Before Signing";
-    summary = "Shield found warning factors in this signature (e.g. unlimited allowance or network mismatch). Review all spending permissions carefully before signing.";
+    summary = "Shield found warning factors in this signature (such as an unlimited allowance or network mismatch). Review all spending permissions carefully before signing.";
   }
 
   const receiptWithoutId = {

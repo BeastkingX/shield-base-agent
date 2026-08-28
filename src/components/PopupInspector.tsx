@@ -185,7 +185,7 @@ export default function PopupInspector() {
           className={`inspectionResultCard ${
             result.verdict === "DO NOT SIGN" || result.verdict === "SECURITY WARNING"
               ? "inspectDanger"
-              : result.verdict === "CAUTION — REVIEW"
+              : result.verdict === "CAUTION (REVIEW)"
               ? "inspectCaution"
               : "inspectSafe"
           }`}
@@ -195,7 +195,7 @@ export default function PopupInspector() {
               <span aria-hidden="true">
                 {result.verdict === "DO NOT SIGN" || result.verdict === "SECURITY WARNING"
                   ? "🛑"
-                  : result.verdict === "CAUTION — REVIEW"
+                  : result.verdict === "CAUTION (REVIEW)"
                   ? "⚠️"
                   : "✅"}
               </span>
