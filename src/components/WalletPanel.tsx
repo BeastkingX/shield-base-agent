@@ -139,109 +139,102 @@ export default function WalletPanel({
   }, [address]);
 
   if (status === "checking") {
-    return (
-      <div className="walletSlimRow">
-        <span className="walletNoteText">Checking wallet provider…</span>
-      </div>
-    );
+    return <span>checking wallet…</span>;
   }
 
   if (status === "unsupported") {
     return (
-      <div className="walletSlimRow">
-        <span className="walletNoteText">
-          Connect your wallet extension (MetaMask, Coinbase Wallet, Rabby) to scan your address automatically.
-        </span>
-      </div>
+      <span style={{ fontSize: "12.5px" }}>
+        <button className="ghostbtn" type="button" onClick={handleConnect}>
+          Connect wallet
+        </button>{" "}
+        <span>· read-only, never signs</span>
+      </span>
     );
   }
 
   if (status !== "connected") {
     return (
-      <div className="walletSlimRow">
+      <>
         <button
-          className="walletGhostBtn"
+          className="ghostbtn"
           type="button"
           disabled={status === "connecting"}
           onClick={handleConnect}
         >
-          {status === "connecting" ? (
-            <>
-              <span className="spinner dark" aria-hidden="true" />
-              <span>Connecting…</span>
-            </>
-          ) : (
-            <>
-              <span className="walletIcon" aria-hidden="true">◈</span>
-              <span>Connect wallet</span>
-              <span className="walletChipHint">Auto-scans your address</span>
-            </>
-          )}
+          {status === "connecting" ? "Connecting…" : "Connect to auto-scan"}
         </button>
-        {error && <span className="walletInlineError" role="alert">{error}</span>}
-      </div>
+        <span>· read-only, never signs</span>
+        {error && <span style={{ color: "var(--red)", fontSize: "12px", marginLeft: "8px" }}>{error}</span>}
+      </>
     );
   }
 
   const onBase = isBaseChain(chainId);
 
   return (
-    <div className="walletConnectedContainer">
-      <div className="walletConnectedBar">
-        <div className="walletIdentityGroup">
-          <span className="walletConnectedDot" aria-hidden="true" />
-          <strong className="walletProviderName">{name}</strong>
-          <code className="walletAddressCode">{shortAddress(address)}</code>
-          <button
-            className="walletCopyIconBtn"
-            type="button"
-            onClick={handleCopy}
-            aria-label="Copy connected wallet address"
-          >
-            {copied ? "✓" : "📋"}
-          </button>
-          <span className={`walletNetworkTag ${onBase ? "networkBase" : "networkWarn"}`}>
-            {onBase ? "Base Mainnet" : describeChain(chainId)}
-          </span>
-        </div>
-
-        <div className="walletActionBar">
-          {!onBase && (
-            <button
-              type="button"
-              className="walletGhostBtn actionBtnSmall"
-              disabled={switching}
-              onClick={handleSwitchToBase}
-            >
-              {switching ? "Switching…" : "Switch to Base"}
-            </button>
-          )}
-          <button
-            type="button"
-            className="walletActionSendBtn"
-            onClick={() => onOpenSendModal?.()}
-          >
-            🛡️ Protected Send
-          </button>
-          <button
-            type="button"
-            className="walletGhostBtn actionBtnSmall"
-            disabled={scanning}
-            onClick={() => onAddress(address)}
-          >
-            {scanning ? "Scanning…" : "Re-scan"}
-          </button>
-          <button
-            className="walletDisconnectBtn"
-            type="button"
-            onClick={handleDisconnect}
-            aria-label="Disconnect wallet"
-          >
-            Disconnect
-          </button>
-        </div>
+    <div className="walletConnectedContainer" style={{ width: "100%", marginTop: "12px" }}>
+      <div className="walletIdentityGroup">
+        <span className="walletConnectedDot" aria-hidden="true" />
+        <strong>{name}</strong>
+        <code>{shortAddress(address)}</code>
+        <button
+          type="button"
+          className="ghostbtn"
+          style={{ minHeight: "28px", padding: "2px 8px", fontSize: "11px" }}
+          onClick={handleCopy}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <span
+          className="etag"
+          style={{
+            color: onBase ? "var(--green)" : "var(--amber)",
+            borderColor: onBase ? "rgba(52,211,153,.3)" : "rgba(251,191,36,.3)",
+          }}
+        >
+          {onBase ? "Base Mainnet" : describeChain(chainId)}
+        </span>
       </div>
-      {error && <p className="walletInlineError" role="alert">{error}</p>}
+
+      <div className="walletActionBar">
+        {!onBase && (
+          <button
+            type="button"
+            className="ghostbtn"
+            style={{ minHeight: "32px", padding: "4px 10px", fontSize: "12px" }}
+            disabled={switching}
+            onClick={handleSwitchToBase}
+          >
+            {switching ? "Switching…" : "Switch to Base"}
+          </button>
+        )}
+        <button
+          type="button"
+          className="walletSendPill"
+          onClick={() => onOpenSendModal?.()}
+        >
+          🛡️ Protected Send
+        </button>
+        <button
+          type="button"
+          className="ghostbtn"
+          style={{ minHeight: "32px", padding: "4px 10px", fontSize: "12px" }}
+          disabled={scanning}
+          onClick={() => onAddress(address)}
+        >
+          {scanning ? "Scanning…" : "Re-scan"}
+        </button>
+        <button
+          type="button"
+          className="ghostbtn"
+          style={{ minHeight: "32px", padding: "4px 10px", fontSize: "12px", color: "var(--red)" }}
+          onClick={handleDisconnect}
+        >
+          Disconnect
+        </button>
+      </div>
+      {error && <p style={{ color: "var(--red)", fontSize: "12px", margin: 0, width: "100%" }}>{error}</p>}
     </div>
   );
 }

@@ -41,7 +41,7 @@ async function run() {
 
       // 2. Scan Clean EOA (LOW OBSERVED RISK verdict)
       await page.fill("#address", "0xa37bA80bA292F3EFA1387468A676660C6e6a5f96");
-      await page.click(".heroScanBtn");
+      await page.click(".cta");
       await page.waitForSelector(".verdict-low-observed-risk", { timeout: 20000 });
       await page.waitForTimeout(600);
 
@@ -51,7 +51,7 @@ async function run() {
 
       // 3. Scan Vitalik (CAUTION verdict)
       await page.fill("#address", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
-      await page.click(".heroScanBtn");
+      await page.click(".cta");
       await page.waitForSelector(".verdict-caution", { timeout: 20000 });
       await page.waitForTimeout(600);
 
@@ -60,7 +60,7 @@ async function run() {
       });
 
       // 4. Evidence section
-      const evidenceEl = await page.$(".evidenceSection");
+      const evidenceEl = await page.$(".evi");
       if (evidenceEl) {
         await evidenceEl.scrollIntoViewIfNeeded();
         await page.waitForTimeout(400);
@@ -82,7 +82,7 @@ async function run() {
       }
 
       // 6. Floating Chat Dock
-      await page.click(".floatingDockLauncher");
+      await page.click(".dockbtn");
       await page.waitForTimeout(400);
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `${vp.name}-${theme}-06-chat-dock.png`),

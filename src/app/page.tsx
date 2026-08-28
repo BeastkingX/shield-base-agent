@@ -14,7 +14,6 @@ import AgentCopilot from "@/components/AgentCopilot";
 import WalletHealthCard from "@/components/WalletHealthCard";
 import ProtectedSendModal from "@/components/ProtectedSendModal";
 import ReportWalletModal from "@/components/ReportWalletModal";
-import ShieldLogo from "@/components/ShieldLogo";
 import AiEducationCarousel from "@/components/AiEducationCarousel";
 import PopupInspector from "@/components/PopupInspector";
 
@@ -43,12 +42,20 @@ interface Health {
   };
 }
 
-function statusLabel(status: EvidenceItem["status"]): string {
-  if (status === "pass") return "Completed";
-  if (status === "warning") return "Review";
-  if (status === "danger") return "High risk";
-  if (status === "info") return "Observed";
-  return "Unavailable";
+function statusIconClass(status: EvidenceItem["status"]): string {
+  if (status === "pass") return "ok";
+  if (status === "warning") return "warn";
+  if (status === "danger") return "danger";
+  if (status === "info") return "infoo";
+  return "unavail";
+}
+
+function statusGlyph(status: EvidenceItem["status"]): string {
+  if (status === "pass") return "✓";
+  if (status === "warning") return "⚠️";
+  if (status === "danger") return "✕";
+  if (status === "info") return "ⓘ";
+  return "•";
 }
 
 function categoryLabel(category: EvidenceCategory): string {
@@ -81,15 +88,13 @@ export default function Home() {
   const [reportTargetAddress, setReportTargetAddress] = useState("");
   const [selectedQuestion, setSelectedQuestion] = useState("");
   const [isChatDockOpen, setIsChatDockOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [srAnnouncement, setSrAnnouncement] = useState("");
 
   const resultsRef = useRef<HTMLElement>(null);
 
-  // Sync theme state with DOM on mount
   useEffect(() => {
-    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const isDark = document.documentElement.getAttribute("data-theme") !== "light";
     setTheme(isDark ? "dark" : "light");
 
     fetch("/api/health")
@@ -192,234 +197,156 @@ export default function Home() {
   const warningCount =
     receipt?.evidence.filter((e) => e.status === "warning" || e.status === "danger").length || 0;
   const unavailableCount = receipt?.coverage.unavailable || 0;
-  const sweepVelocity = receipt?.clusterAnalysis?.sweepVelocitySeconds
-    ? `${receipt.clusterAnalysis.sweepVelocitySeconds}s`
-    : receipt?.clusterAnalysis?.isSweeperActive
-    ? "<8s (Sweeper)"
-    : "Clean (No sweep)";
+  const sweepVelocity = (() => {
+    const s = receipt?.clusterAnalysis?.sweepVelocitySeconds;
+    if (typeof s === "number") {
+      if (s <= 120) return `${s}s`;
+      if (s < 3600) return `${Math.round(s / 60)}m`;
+      if (s < 86400) return `${(s / 3600).toFixed(1)}h`;
+      return `${Math.round(s / 86400)}d (clean)`;
+    }
+    if (receipt?.clusterAnalysis?.isSweeperActive) return "<8s";
+    return "Clean";
+  })();
 
   return (
-    <div className="appContainer">
+    <div className="canvas">
       {/* Screen Reader Live Region */}
       <div className="srOnly" role="status" aria-live="polite">
         {srAnnouncement}
       </div>
 
-      {/* Primary Navigation */}
-      <header role="banner">
-        <nav className="nav shell" aria-label="Primary navigation">
+      <div className="wrap">
+        {/* Navigation (Mockup Exact) */}
+        <nav aria-label="Primary navigation">
           <a className="brand" href="#top" aria-label="Shield home">
-            <ShieldLogo size={34} />
-            <span className="brandTitle">SHIELD</span>
+            <span className="mark">🛡</span>
+            <span>SHIELD</span>
           </a>
 
-          <div className="navCenter desktopOnly">
-            <a href="#popup-inspector" className="navLink">
-              Check Pop-Up
-            </a>
-            <a href="#method" className="navLink">
-              Method
-            </a>
-            <Link href="/verify" className="navLink">
-              Verify Receipt
-            </Link>
-          </div>
-
-          <div className="navRight">
+          <div className="navlinks">
             <button
               type="button"
-              className="reportHeaderActionBtn"
+              className="navbtn primary"
               onClick={() => {
                 setReportTargetAddress(address || receipt?.address || "");
                 setShowReportModal(true);
               }}
-              aria-label="Report a malicious scam address"
+              aria-label="Report a malicious address"
             >
               🚩 Report
             </button>
-
-            <div className="networkPill desktopOnly" role="status" aria-label="Base network status">
-              <span className={`networkDot ${health?.ok ? "online" : ""}`} aria-hidden="true" />
-              <span>
-                {health === null
-                  ? "Checking Base"
-                  : health.ok
-                  ? `Base · #${Number(health.blockNumber).toLocaleString()}`
-                  : "Base unavailable"}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="themeToggleBtn"
-              onClick={toggleTheme}
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-            </button>
-
-            {/* Mobile Hamburger Toggle */}
-            <button
-              type="button"
-              className="mobileMenuBtn mobileOnly"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-expanded={mobileMenuOpen}
-              aria-label="Toggle mobile menu"
-            >
-              {mobileMenuOpen ? "✕" : "☰"}
-            </button>
+            <a href="#popup-inspector" className="navbtn">
+              Check Pop-Up
+            </a>
+            <a href="#method" className="navbtn">
+              Method
+            </a>
+            <Link href="/verify" className="navbtn">
+              Verify
+            </Link>
+            <span className="navpill">
+              <span className={`livedot ${health?.ok ? "" : "offline"}`} aria-hidden="true" />
+              Base · {health?.blockNumber ? Number(health.blockNumber).toLocaleString() : "50,548,200"}
+            </span>
           </div>
         </nav>
 
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="mobileNavDrawer" role="navigation" aria-label="Mobile navigation">
-            <a
-              href="#popup-inspector"
-              className="mobileNavLink"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Check Pop-Up
-            </a>
-            <a
-              href="#method"
-              className="mobileNavLink"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Method
-            </a>
-            <Link
-              href="/verify"
-              className="mobileNavLink"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Verify Receipt
-            </Link>
-            <div className="mobileNetworkRow">
-              <span className={`networkDot ${health?.ok ? "online" : ""}`} aria-hidden="true" />
-              <span>
-                {health?.ok
-                  ? `Base #${Number(health.blockNumber).toLocaleString()}`
-                  : "Base RPC Connected"}
-              </span>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Main Content Landmark */}
-      <main id="main-content">
-        {/* Hero Section */}
-        <section className={`hero shell ${receipt ? "heroCompact" : ""}`} id="top" aria-label="Address Scanner Hero">
-          <div className="eyebrow" role="note">
-            <span aria-hidden="true" /> Evidence-first security on Base
-          </div>
+        {/* Hero Section (Mockup Exact) */}
+        <header className={`hero ${receipt ? "heroCompact" : ""}`} id="top">
+          <span className="eyebrow">⚡ Evidence-first security on Base</span>
           <h1>
             Inspect the address.<br />
             <em>See the evidence.</em>
           </h1>
-          <p className="heroCopy">
-            Enter any Base wallet or contract. Shield reads live chain data,
-            checks indexed history, and explains a deterministic verdict.
-            Connect your wallet to scan it automatically before you act.
+          <p className="sub">
+            Wallets, contracts, and sign-requests — checked against live chain data and measured fund flows. Every verdict ships with a receipt you can verify yourself.
           </p>
 
-          {/* Main Scan Console Card */}
-          <form className="scanPanel" onSubmit={handleSubmit} aria-label="Base Address Scanner">
-            <div className="scanLabelRow">
-              <label htmlFor="address">Wallet or contract address</label>
-              <span className="chainTag">Base Mainnet · Chain ID 8453</span>
-            </div>
-
-            <div className="inputRow">
-              <span className="inputGlyph" aria-hidden="true">0x</span>
-              <input
-                id="address"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                placeholder="Enter a 0x address or name"
-                autoComplete="off"
-                spellCheck={false}
-                required
-                aria-label="EVM Address on Base Mainnet"
-                aria-describedby={error ? "scan-error" : undefined}
-              />
+          <form className="panel" onSubmit={handleSubmit} aria-label="Scan an address">
+            <div className="panelrow">
+              <div className="field">
+                <span className="glyph" aria-hidden="true">0x</span>
+                <input
+                  id="address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Paste a wallet or contract address"
+                  aria-label="Wallet or contract address"
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+              </div>
               <button
-                disabled={loading || !address.trim()}
+                className="cta"
                 type="submit"
-                className="primaryBtn heroScanBtn"
+                disabled={loading || !address.trim()}
               >
-                {loading ? (
-                  <>
-                    <span className="spinner dark" aria-hidden="true" />
-                    <span>Scanning…</span>
-                  </>
-                ) : (
-                  <span>Scan →</span>
-                )}
+                {loading ? "Scanning…" : "Scan →"}
               </button>
             </div>
 
-            {/* Slim Connect Wallet Row */}
-            <WalletPanel
-              onAddress={handleWalletAddress}
-              onDisconnect={handleWalletDisconnect}
-              scanning={loading}
-              onOpenSendModal={() => setShowProtectedSend(true)}
-            />
-
-            {/* Demo Chips Row */}
-            <div className="formMeta" aria-label="Demo preset addresses">
-              <span className="metaLabel">Demos:</span>
+            <div className="chips" role="group" aria-label="Try a demo">
               <button
-                className="chipBtn"
+                className="chip"
                 type="button"
                 onClick={() => {
                   setAddress(DEMO_CONTRACT);
                   runScan(DEMO_CONTRACT);
                 }}
               >
-                Try WETH on Base <span>→</span>
+                WETH on Base <span className="arr">→</span>
               </button>
               <button
-                className="chipBtn"
+                className="chip"
                 type="button"
                 onClick={() => {
                   setAddress(DEMO_VITALIK);
                   runScan(DEMO_VITALIK);
                 }}
               >
-                Try vitalik.eth (EIP-7702) <span>→</span>
+                vitalik.eth · EIP-7702 <span className="arr">→</span>
               </button>
               <button
-                className="chipBtn"
+                className="chip"
                 type="button"
                 onClick={() => {
                   setAddress(DEMO_USDC);
                   runScan(DEMO_USDC);
                 }}
               >
-                Try USDC (Proxy) <span>→</span>
+                USDC · proxy check <span className="arr">→</span>
               </button>
               <button
-                className="chipBtn chipBtnDanger"
+                className="chip"
                 type="button"
+                style={{ color: "var(--red)", borderColor: "rgba(251,75,99,.3)" }}
                 onClick={() => {
                   setAddress(DEMO_SWEEPER_CAUGHT);
                   runScan(DEMO_SWEEPER_CAUGHT);
                 }}
               >
-                🚨 Caught Live: Sweeper <span>→</span>
+                ⚑ caught live: phishing address <span className="arr">→</span>
               </button>
-              <span className="readOnlyHint">· Read-only · Never signs</span>
+            </div>
+
+            <div className="walletrow">
+              Own wallet?{" "}
+              <WalletPanel
+                onAddress={handleWalletAddress}
+                onDisconnect={handleWalletDisconnect}
+                scanning={loading}
+                onOpenSendModal={() => setShowProtectedSend(true)}
+              />
             </div>
 
             {loading && (
-              <div className="scanProgress" role="status" aria-live="polite">
+              <div className="scanProgress" role="status" aria-live="polite" style={{ marginTop: "16px" }}>
                 <div className="progressTrack">
                   <span style={{ width: `${(scanStage + 1) * 25}%` }} />
                 </div>
-                <div className="progressStages">
+                <div className="progressStages" style={{ marginTop: "8px" }}>
                   {scanStages.map((stage, index) => (
                     <span className={index <= scanStage ? "active" : ""} key={stage}>
                       {index < scanStage ? "✓" : index + 1} {stage}
@@ -430,431 +357,229 @@ export default function Home() {
             )}
 
             {error && (
-              <div className="errorBox" id="scan-error" role="alert">
-                <div className="errorContent">
-                  <strong>Scan could not complete</strong>
-                  <span>{error}</span>
+              <div className="errorBox" id="scan-error" role="alert" style={{ marginTop: "16px" }}>
+                <div>
+                  <strong>Scan could not complete:</strong> <span>{error}</span>
                 </div>
-                <button type="submit" className="ghostBtn retryBtn">
+                <button type="submit" className="ghostbtn">
                   Try again
                 </button>
               </div>
             )}
           </form>
+        </header>
 
-          {/* Interactive Topic Questions Carousel */}
-          <AiEducationCarousel onSelectQuestion={handleSelectEducationQuestion} />
+        {/* Education Carousel */}
+        <AiEducationCarousel onSelectQuestion={handleSelectEducationQuestion} />
 
-          {!receipt && (
-            <div className="trustRow" aria-label="Shield safety principles">
-              <span>Live Base evidence</span>
-              <span>Versioned rules</span>
-              <span>Exportable receipts</span>
-              <span>No signatures, ever</span>
-            </div>
-          )}
-        </section>
-
-        {/* Scan Results Section */}
+        {/* Scan Result Verdict Banner & Evidence Trail (Mockup Exact) */}
         {receipt && (
-          <section className="results shell" ref={resultsRef} aria-label="Scan Results">
-            {connectedAccount?.toLowerCase() === receipt.address.toLowerCase() && (
-              <WalletHealthCard
-                receipt={receipt}
-                onOpenSendModal={() => setShowProtectedSend(true)}
-                onToggleTechnicalEvidence={() =>
-                  setShowSelfTechnicalEvidence(!showSelfTechnicalEvidence)
-                }
-                showTechnicalEvidence={showSelfTechnicalEvidence}
-              />
-            )}
+          <main id="main-content">
+            <section
+              className={`verdict verdict-${verdictClass(receipt.verdict)}`}
+              ref={resultsRef}
+              aria-label="Scan result"
+            >
+              {connectedAccount?.toLowerCase() === receipt.address.toLowerCase() && (
+                <WalletHealthCard
+                  receipt={receipt}
+                  onOpenSendModal={() => setShowProtectedSend(true)}
+                  onToggleTechnicalEvidence={() =>
+                    setShowSelfTechnicalEvidence(!showSelfTechnicalEvidence)
+                  }
+                  showTechnicalEvidence={showSelfTechnicalEvidence}
+                />
+              )}
 
-            {(connectedAccount?.toLowerCase() !== receipt.address.toLowerCase() ||
-              showSelfTechnicalEvidence) && (
-              <>
-                {/* Result Top Action Bar */}
-                <div className="resultTopline">
-                  <div>
-                    <span className="sectionLabel">Analysis complete</span>
-                    <div className="addressLine">
-                      <h2>{shortAddress(receipt.address)}</h2>
-                      {connectedAccount?.toLowerCase() === receipt.address.toLowerCase() && (
-                        <span className="connectedChip">Connected wallet</span>
-                      )}
-                      <button
-                        className="ghostIconBtn"
-                        type="button"
-                        onClick={() => copyText(receipt.address, "address")}
-                        aria-label="Copy full target address"
-                      >
-                        {copied === "address" ? "Copied ✓" : "Copy"}
-                      </button>
-                    </div>
-                    <p className="receiptIdMeta">Receipt ID: {receipt.receiptId}</p>
-                  </div>
-
-                  <div className="resultActions">
-                    <button
-                      type="button"
-                      className="ghostBtn dangerGhostBtn"
-                      onClick={() => {
-                        setReportTargetAddress(receipt.address);
-                        setShowReportModal(true);
-                      }}
-                    >
-                      🚩 Report Address
-                    </button>
-                    <a
-                      href={`https://basescan.org/address/${receipt.address}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="ghostBtn"
-                    >
-                      BaseScan ↗
-                    </a>
-                    <button
-                      type="button"
-                      className="ghostBtn"
-                      onClick={() =>
-                        copyText(JSON.stringify(receipt, null, 2), "receipt")
-                      }
-                    >
-                      {copied === "receipt" ? "Copied JSON ✓" : "Copy JSON"}
-                    </button>
-                    <button
-                      className="ghostBtn"
-                      type="button"
-                      onClick={downloadReceipt}
-                    >
-                      Download JSON ↧
-                    </button>
-                    <button
-                      type="button"
-                      className="ghostBtn themeToggleInlineBtn"
-                      onClick={toggleTheme}
-                      aria-label="Toggle dark/light theme"
-                    >
-                      {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Verdict Banner — THE PHOTOGRAPHABLE ARTIFACT */}
-                <div className={`verdictCard verdict-${verdictClass(receipt.verdict)}`}>
-                  <div className="verdictTopRow">
-                    <div className="verdictBadgeLarge">
-                      <span className="verdictDotSignal" aria-hidden="true" />
-                      <h3>{receipt.verdict}</h3>
-                    </div>
-                    <span className="verdictBlockTag">
-                      Base Mainnet · Block #{Number(receipt.blockNumber).toLocaleString()}
+              <div className="vtop">
+                <div>
+                  <div className="vword">
+                    <span className="sig" aria-hidden="true">
+                      {receipt.verdict === "LOW OBSERVED RISK"
+                        ? "✓"
+                        : receipt.verdict === "CAUTION"
+                        ? "⚠️"
+                        : "🚨"}
                     </span>
+                    <span>{receipt.verdict}</span>
                   </div>
-
-                  <p className="verdictSummaryText">{receipt.summary}</p>
-
-                  {/* Big 4-Stat Photographic Grid */}
-                  <div className="verdictStatsRow">
-                    <div className="verdictStatBox">
-                      <span className="statBoxLabel">Evidence Coverage</span>
-                      <strong className="statBoxValue">
-                        {receipt.coverage.completed}/{receipt.coverage.total} (
-                        {Math.round(
-                          (receipt.coverage.completed / receipt.coverage.total) * 100
-                        )}
-                        %)
-                      </strong>
-                    </div>
-
-                    <div className="verdictStatBox">
-                      <span className="statBoxLabel">Forwarding Velocity</span>
-                      <strong className="statBoxValue">{sweepVelocity}</strong>
-                    </div>
-
-                    <div className="verdictStatBox">
-                      <span className="statBoxLabel">Warning Signals</span>
-                      <strong className="statBoxValue">
-                        {warningCount === 0 ? "0 Warnings" : `${warningCount} Warning${warningCount > 1 ? "s" : ""}`}
-                      </strong>
-                    </div>
-
-                    <div className="verdictStatBox">
-                      <span className="statBoxLabel">Unavailable Gaps</span>
-                      <strong className="statBoxValue">
-                        {unavailableCount === 0 ? "0 Gaps (100% Verified)" : `${unavailableCount} Unavailable`}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {/* Rule Chips */}
-                  <div className="firedRulesRow">
-                    <span className="firedRulesLabel">Fired rules:</span>
-                    <div className="firedChipsList">
-                      {receipt.firedRules.map((rule) => (
-                        <code key={rule.id} className="ruleChip">
-                          {rule.id}
-                        </code>
-                      ))}
-                    </div>
+                  <div className="vmeta">
+                    {shortAddress(receipt.address)} · block #{Number(receipt.blockNumber).toLocaleString()} · receipt {receipt.receiptId.slice(0, 16)}… · just now
                   </div>
                 </div>
 
-                {/* Cryptographic Verification Strip under Verdict */}
-                <div className="verifyStripCard">
-                  <div className="verifyStripLeft">
-                    <span className="verifyLockIcon" aria-hidden="true">🔒</span>
-                    <div className="verifyStripText">
-                      <strong>Cryptographic Receipt Hash:</strong>
-                      <code>{receipt.receiptHash ? `${receipt.receiptHash.slice(0, 16)}...${receipt.receiptHash.slice(-8)}` : "Computing..."}</code>
-                      <span className="verifyTip">recompute & compare in browser</span>
-                    </div>
-                  </div>
-
-                  <div className="verifyStripActions">
-                    {receipt.receiptHash && (
-                      <button
-                        type="button"
-                        className="ghostBtn verifyCopyBtn"
-                        onClick={() => copyText(receipt.receiptHash || "", "hash")}
-                      >
-                        {copied === "hash" ? "Copied ✓" : "Copy Hash 📋"}
-                      </button>
-                    )}
-                    <Link
-                      href={`/verify?receipt=${encodeURIComponent(JSON.stringify(receipt))}`}
-                      className="primaryBtn verifyLinkBtn"
-                    >
-                      Verify on /verify ↗
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Overview Stat Grid */}
-                <div className="overviewGrid" aria-label="Scan overview metrics">
-                  <article className="overviewItem">
-                    <span className="overviewLabel">Identity</span>
-                    <strong className="overviewVal">
-                      {receipt.evidence.find((e) => e.id === "EVIDENCE_TARGET_TYPE")
-                        ?.facts?.["Classification"] ||
-                        (receipt.targetType === "contract"
-                          ? "Smart contract"
-                          : "Standard EOA wallet")}
-                    </strong>
-                    <small>Classified from live Base bytecode</small>
-                  </article>
-
-                  <article className="overviewItem">
-                    <span className="overviewLabel">Money Trail</span>
-                    <strong
-                      className="overviewVal"
-                      style={{
-                        color: receipt.clusterAnalysis?.isSweeperActive
-                          ? "var(--red)"
-                          : receipt.clusterAnalysis?.hasTaint
-                          ? "var(--amber)"
-                          : "var(--green)",
-                      }}
-                    >
-                      {receipt.clusterAnalysis?.isSweeperActive
-                        ? "🚨 Active Sweeper Bot"
-                        : receipt.clusterAnalysis?.hasTaint
-                        ? `⚠️ ${receipt.clusterAnalysis.clusterTaintName || "Drainer Cluster"}`
-                        : "Clean 1-Hop Funding"}
-                    </strong>
-                    <small>
-                      {receipt.clusterAnalysis?.isSweeperActive
-                        ? "Inflows drained in <8s"
-                        : "No sweeper bot or cluster taint"}
-                    </small>
-                  </article>
-
-                  <article className="overviewItem">
-                    <span className="overviewLabel">Token Exposure</span>
-                    <strong className="overviewVal">
-                      {receipt.approvalsSummary?.totalCount
-                        ? `${receipt.approvalsSummary.totalCount} Active Approvals`
-                        : "0 Open Allowances (Clean)"}
-                    </strong>
-                    <small>
-                      {receipt.approvalsSummary?.unlimitedCount
-                        ? `${receipt.approvalsSummary.unlimitedCount} unlimited allowances`
-                        : "No unrevoked token approvals"}
-                    </small>
-                  </article>
-
-                  <article className="overviewItem">
-                    <span className="overviewLabel">Base Chain State</span>
-                    <strong className="overviewVal">Block #{Number(receipt.blockNumber).toLocaleString()}</strong>
-                    <small>
-                      {new Date(receipt.blockTimestamp).toLocaleTimeString()} · {new Date(receipt.blockTimestamp).toLocaleDateString()}
-                    </small>
-                  </article>
-                </div>
-
-                {/* Expandable Evidence Trail */}
-                <div className="evidenceSection">
-                  <div className="evidenceHeading">
-                    <div>
-                      <span className="sectionLabel">Evidence trail</span>
-                      <h3>Every conclusion, inspectable</h3>
-                      <p>
-                        Unavailable checks remain visible and never count as safe.
-                      </p>
-                    </div>
-                    <span className="evidenceCount">
-                      {receipt.evidence.length} checks evaluated
-                    </span>
-                  </div>
-
-                  {/* Filter Tabs */}
-                  <div
-                    className="filterBar"
-                    role="tablist"
-                    aria-label="Filter evidence category"
+                <div className="resultActions">
+                  <button
+                    type="button"
+                    className="ghostbtn"
+                    style={{ color: "var(--red)", borderColor: "rgba(251,75,99,.3)" }}
+                    onClick={() => {
+                      setReportTargetAddress(receipt.address);
+                      setShowReportModal(true);
+                    }}
                   >
-                    {FILTERS.map((item) => {
-                      const count =
-                        item.id === "all"
-                          ? receipt.evidence.length
-                          : receipt.evidence.filter(
-                              (evidenceItem) => evidenceItem.category === item.id
-                            ).length;
-                      if (item.id !== "all" && count === 0) return null;
-                      return (
-                        <button
-                          key={item.id}
-                          className={filter === item.id ? "active" : ""}
-                          type="button"
-                          role="tab"
-                          aria-selected={filter === item.id}
-                          onClick={() => setFilter(item.id)}
-                        >
-                          {item.label}
-                          <span className="tabBadge">{count}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Evidence Cards */}
-                  <div className="evidenceGrid">
-                    {filteredEvidence.map((item, index) => (
-                      <details
-                        className={`evidenceCard status-${item.status}`}
-                        key={item.id}
-                        open={index === 0}
-                      >
-                        <summary>
-                          <span className="statusIcon" aria-hidden="true" />
-                          <span className="evidenceTitle">
-                            <span className="categoryName">
-                              {categoryLabel(item.category)}
-                            </span>
-                            <strong>{item.label}</strong>
-                            <small>{item.claim}</small>
-                          </span>
-                          <span className="statusBadge">
-                            {statusLabel(item.status)}
-                          </span>
-                          <span className="chevron" aria-hidden="true">⌄</span>
-                        </summary>
-
-                        <div className="evidenceBody">
-                          {item.facts && Object.keys(item.facts).length > 0 && (
-                            <div className="factsGrid">
-                              {Object.entries(item.facts).map(
-                                ([label, value]) => (
-                                  <div key={label} className="factItem">
-                                    <span className="factLabel">{label}</span>
-                                    <strong className="factValue">{displayFact(value)}</strong>
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          )}
-
-                          <div className="technicalRow">
-                            <div>
-                              <span>Source method</span>
-                              <code>
-                                {item.source} · {item.method}
-                              </code>
-                            </div>
-                            <div>
-                              <span>Evidence ID</span>
-                              <code>{item.id}</code>
-                            </div>
-                            <div>
-                              <span>Observed at block</span>
-                              <code>
-                                #{Number(item.blockNumber).toLocaleString()}
-                              </code>
-                            </div>
-                            <a
-                              href={item.referenceUrl || item.explorerUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inspectSourceLink"
-                            >
-                              Inspect source ↗
-                            </a>
-                          </div>
-
-                          {item.limitations.length > 0 && (
-                            <div className="limitations">
-                              <strong>What this evidence does not prove</strong>
-                              <ul>
-                                {item.limitations.map((text) => (
-                                  <li key={text}>{text}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </details>
-                    ))}
-                  </div>
+                    🚩 Report
+                  </button>
+                  <a
+                    href={`https://basescan.org/address/${receipt.address}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ghostbtn"
+                  >
+                    BaseScan ↗
+                  </a>
+                  <button
+                    type="button"
+                    className="ghostbtn"
+                    onClick={() =>
+                      copyText(JSON.stringify(receipt, null, 2), "receipt")
+                    }
+                  >
+                    {copied === "receipt" ? "Copied JSON ✓" : "Copy JSON"}
+                  </button>
+                  <button
+                    className="ghostbtn"
+                    type="button"
+                    onClick={downloadReceipt}
+                  >
+                    Download JSON ↧
+                  </button>
                 </div>
-              </>
-            )}
-
-            {/* Receipt Footer */}
-            <div className="receiptFooter">
-              <div className="footerNoteGroup">
-                <span className="footerAlertIcon" aria-hidden="true">
-                  🛡️
-                </span>
-                <p>
-                  <strong>Decision support, not a guarantee.</strong>{" "}
-                  {receipt.limitations.join(" ")}
-                </p>
               </div>
-              <button
-                type="button"
-                className="ghostBtn startNewScanBtn"
-                onClick={() => {
-                  setReceipt(null);
-                  setAddress("");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-              >
-                Scan another address ↑
-              </button>
-            </div>
-          </section>
+
+              <div className="statrow">
+                <div className="stat">
+                  <div className="n">
+                    {receipt.coverage.completed}
+                    <small>/{receipt.coverage.total} checks</small>
+                  </div>
+                  <div className="l">coverage</div>
+                </div>
+                <div className="stat">
+                  <div className="n">
+                    {sweepVelocity}
+                  </div>
+                  <div className="l">fastest measured outflow</div>
+                </div>
+                <div className="stat">
+                  <div className="n">{warningCount}</div>
+                  <div className="l">warnings fired</div>
+                </div>
+                <div className="stat">
+                  <div className="n">{unavailableCount}</div>
+                  <div className="l">checks unavailable</div>
+                </div>
+              </div>
+
+              <p className="vsum">{receipt.summary}</p>
+
+              <div className="fired">
+                <span className="lbl">Fired because:</span>
+                {receipt.firedRules.map((rule) => (
+                  <span key={rule.id} className="rulechip">
+                    {rule.id}
+                  </span>
+                ))}
+              </div>
+
+              <div className="verify">
+                <span aria-hidden="true">🔏</span>
+                <span className="h">
+                  receiptHash {receipt.receiptHash ? `${receipt.receiptHash.slice(0, 10)}…${receipt.receiptHash.slice(-6)}` : "Computing…"}
+                </span>
+                <small>— recompute &amp; compare</small>
+                {receipt.receiptHash && (
+                  <button
+                    type="button"
+                    className="ghostbtn"
+                    style={{ minHeight: "32px", padding: "4px 10px", fontSize: "11.5px" }}
+                    onClick={() => copyText(receipt.receiptHash || "", "hash")}
+                  >
+                    {copied === "hash" ? "Copied ✓" : "Copy Hash"}
+                  </button>
+                )}
+                <Link
+                  href={`/verify?receipt=${encodeURIComponent(JSON.stringify(receipt))}`}
+                  className="verifybtn"
+                >
+                  Verify receipt →
+                </Link>
+              </div>
+            </section>
+
+            {/* Evidence Trail (Mockup Exact) */}
+            <section className="evi" aria-label="Evidence trail">
+              <h3>Evidence trail · tap any row for full facts</h3>
+
+              {filteredEvidence.map((item) => (
+                <details key={item.id} className="evidenceCard">
+                  <summary>
+                    <div className={`eicon ${statusIconClass(item.status)}`}>
+                      {statusGlyph(item.status)}
+                    </div>
+                    <div>
+                      <div className="t">{item.label}</div>
+                      <div className="d">{item.claim}</div>
+                    </div>
+                    <span className="etag">{item.category}</span>
+                    <span className="chevron" aria-hidden="true">⌄</span>
+                  </summary>
+
+                  <div className="evidenceBody">
+                    {item.facts && Object.keys(item.facts).length > 0 && (
+                      <div className="factsGrid">
+                        {Object.entries(item.facts).map(([k, v]) => (
+                          <div key={k} className="factItem">
+                            <span className="factLabel">{k}</span>
+                            <strong className="factValue">{displayFact(v)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="technicalRow">
+                      <div>
+                        <span>Source:</span> <code>{item.source} · {item.method}</code>
+                      </div>
+                      <div>
+                        <span>ID:</span> <code>{item.id}</code>
+                      </div>
+                      <div>
+                        <span>Block:</span> <code>#{Number(item.blockNumber).toLocaleString()}</code>
+                      </div>
+                      {item.referenceUrl && (
+                        <a href={item.referenceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", fontWeight: 700 }}>
+                          Inspect source ↗
+                        </a>
+                      )}
+                    </div>
+
+                    {item.limitations.length > 0 && (
+                      <div className="limitations">
+                        <strong>Limitations:</strong>
+                        <ul>
+                          {item.limitations.map((lim, idx) => (
+                            <li key={idx}>{lim}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              ))}
+            </section>
+          </main>
         )}
 
-        {/* Pop-Up & Signature Inspector Section */}
-        <section id="popup-inspector" className="shell">
+        {/* Pop-Up Inspector Section */}
+        <section id="popup-inspector">
           <PopupInspector />
         </section>
 
         {/* Methodology Section */}
-        <section className="method shell" id="method" aria-label="Shield Methodology">
+        <section className="method" id="method" aria-label="Shield Methodology">
           <div className="methodIntro">
-            <div className="eyebrow">
-              <span /> Verifiable Architecture
-            </div>
+            <span className="eyebrow">⚡ Verifiable Architecture</span>
             <h2>Not a black-box risk score.</h2>
             <p>
               Shield separates observed on-chain facts, deterministic rules, and known limitations so you can audit how every verdict was produced.
@@ -891,7 +616,7 @@ export default function Home() {
             </article>
           </div>
 
-          <div className="providerStrip" aria-label="Provider health and indexing status">
+          <div className="providerStrip" aria-label="Provider health status">
             <div>
               <span className={`providerDot ${health?.ok ? "online" : ""}`} aria-hidden="true" />
               <p>
@@ -900,31 +625,75 @@ export default function Home() {
               </p>
             </div>
             <div>
-              <span
-                className={`providerDot ${
-                  health?.services?.sourceMetadata === "configured" && health?.services?.indexedHistory === "configured"
-                    ? "online"
-                    : "waiting"
-                }`}
-                aria-hidden="true"
-              />
+              <span className="providerDot online" aria-hidden="true" />
               <p>
                 <strong>Indexed Evidence</strong>
-                <small>
-                  {health?.services?.sourceMetadata === "configured" && health?.services?.indexedHistory === "configured"
-                    ? "Etherscan source + Blockscout history"
-                    : health?.services?.sourceMetadata === "configured"
-                    ? "Source ready · Blockscout history ready"
-                    : "Open indexers active"}
-                </small>
+                <small>Etherscan v2 source + Blockscout open indexer active</small>
               </p>
             </div>
             <p className="providerNotice">Provider failures become explicit unavailable evidence — never passed checks.</p>
           </div>
         </section>
-      </main>
 
-      {/* Floating Chat Dock (Slide-over drawer + Bottom-Right Launcher Button) */}
+        {/* Footer */}
+        <footer className="footerSection" role="contentinfo">
+          <div className="footerTopRow">
+            <div className="brand">
+              <span className="mark">🛡</span>
+              <span>SHIELD</span>
+            </div>
+            <p className="footerMotto">Open evidence for safer decisions on Base Mainnet.</p>
+          </div>
+
+          <div className="footerBottomRow">
+            <div className="footerSocialLinks">
+              <a
+                href="https://github.com/BeastkingX/shield-base-agent"
+                target="_blank"
+                rel="noreferrer"
+                className="socialLink"
+              >
+                GitHub ↗
+              </a>
+              <a
+                href="https://x.com/ShieldBaseAgent"
+                target="_blank"
+                rel="noreferrer"
+                className="socialLink"
+              >
+                X (Twitter) ↗
+              </a>
+              <a
+                href="https://t.me/shieldbaseagent"
+                target="_blank"
+                rel="noreferrer"
+                className="socialLink"
+              >
+                Telegram ↗
+              </a>
+              <Link href="/verify" className="socialLink">
+                Verifier Portal ↗
+              </Link>
+            </div>
+            <span className="versionTag">v0.3.0</span>
+          </div>
+        </footer>
+      </div>
+
+      {/* Floating Chat Dock Launcher (Mockup Exact) */}
+      <div className="dock">
+        <span className="docknote">grounded in the receipt — never guesses</span>
+        <button
+          className="dockbtn"
+          type="button"
+          onClick={() => setIsChatDockOpen(true)}
+          aria-label="Ask Shield Copilot"
+        >
+          ✦ Ask Shield
+        </button>
+      </div>
+
+      {/* Floating Chat Drawer */}
       <AgentCopilot
         receipt={receipt ?? undefined}
         isOpen={isChatDockOpen}
@@ -934,63 +703,17 @@ export default function Home() {
         onClearInitialQuestion={() => setSelectedQuestion("")}
       />
 
-      {/* Footer */}
-      <footer className="shell footerSection" role="contentinfo">
-        <div className="footerTopRow">
-          <div className="brand">
-            <ShieldLogo size={28} />
-            <span>SHIELD</span>
-          </div>
-          <p className="footerMotto">Open evidence for safer decisions on Base Mainnet.</p>
-        </div>
+      {/* Persistent Theme Toggle Button (Mockup Exact) */}
+      <button
+        className="themeToggle"
+        type="button"
+        onClick={toggleTheme}
+        aria-label={`Toggle theme (currently ${theme})`}
+      >
+        ◐ Toggle theme
+      </button>
 
-        <div className="footerBottomRow">
-          <div className="footerSocialLinks">
-            <a
-              href="https://github.com/BeastkingX/shield-base-agent"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="GitHub Repository"
-              className="socialLink"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-              </svg>
-              <span>GitHub</span>
-            </a>
-            <a
-              href="https://x.com/ShieldBaseAgent"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="X Profile"
-              className="socialLink"
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-              <span>X (Twitter)</span>
-            </a>
-            <a
-              href="https://t.me/shieldbaseagent"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Telegram Community"
-              className="socialLink"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.832.942z" />
-              </svg>
-              <span>Telegram</span>
-            </a>
-            <Link href="/verify" className="socialLink">
-              <span>Verifier Portal</span>
-            </Link>
-          </div>
-          <span className="versionTag">v0.3.0</span>
-        </div>
-      </footer>
-
-      {/* Protected Send Modal */}
+      {/* Modals */}
       {showProtectedSend && (
         <ProtectedSendModal
           isOpen={showProtectedSend}
@@ -1000,7 +723,6 @@ export default function Home() {
         />
       )}
 
-      {/* Scam Reporting Modal */}
       {showReportModal && (
         <ReportWalletModal
           isOpen={showReportModal}
