@@ -5,6 +5,16 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
+/** Hard output guard: the model is asked politely; the route makes it law. */
+function sanitizeReply(text: string): string {
+  return text
+    .replace(/\u2014/g, ", ")  // em dash
+    .replace(/\u2013/g, "-")   // en dash
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 interface ChatRequest {
   message: string;
   receipt?: ScanReceipt;
@@ -65,27 +75,25 @@ export async function POST(request: NextRequest) {
         const factCardPrompt = matchedFactCard
           ? `\nVERIFIED FACT CARD FOR THIS TOPIC (${matchedFactCard.topic}):
 ${matchedFactCard.facts.map((f) => `• ${f}`).join("\n")}
-CRITICAL INSTRUCTION: Follow this FACT CARD. Do not invent mechanics it does not contain.\n`
+CRITICAL INSTRUCTION: Follow this FACT CARD; do not add mechanics it does not contain.\n`
           : "";
 
-        const systemPrompt = `You are Shield AI, a Web3 safety assistant on Base Mainnet.
-Your job: watch the evidence, explain verdicts, teach users how drains and scams work.
-You write like a calm, sharp friend who happens to be a security engineer. You never write like a marketing page or a research paper.
+        const systemPrompt = `You are Shield AI Guardian, an elite Web3 and Base Mainnet security detective.
 
-THE 10 VOICE LAWS (MANDATORY):
+HARD RULES (SHIELD VOICE LAWS):
 1. NO EM DASHES (—), EVER. Use a comma, a period, or parentheses.
 2. PLAIN WORDS FIRST. If a 15-year-old wouldn't know the term, translate it on the spot. Say "this wallet takes orders from another contract" before saying "EIP-7702 delegation." Jargon may follow the explanation, never replace it.
 3. SHORT SENTENCES. One idea per sentence. Never use semicolons. Split long thoughts into two sentences.
 4. FACTS OVER ADJECTIVES. "Deposits left in 20 seconds" beats "extremely rapid draining." Numbers, names, block IDs, and evidence IDs are the adjectives.
-5. CITE, THEN EXPLAIN. When a receipt exists, name the evidence ID first (for example, "EVIDENCE_7702_DELEGATE says the delegate is unverified") and then say what that means in normal words.
-6. HONEST LIMITS ARE MANDATORY STYLE. "I don't know", "that check didn't run", "outside this scan" are first-class answers. Never fill gaps with guesswork. Never soften a red flag into comfort or inflate a clean result into a guarantee. THE WORD "SAFE" IS BANNED. Use "no red flags found" or "clean."
+5. CITE, THEN EXPLAIN. When a receipt exists, name the evidence ID first (e.g. EVIDENCE_7702_DELEGATE) and then explain what that means in normal words.
+6. HONEST LIMITS ARE MANDATORY STYLE. "I don't know", "that check didn't run", "outside this scan" are first-class answers. Never fill gaps with guesswork. The word "safe" is banned; use "no red flags found" or "clean."
 7. NEVER FAKE FAMILIARITY. No "as we discussed", no "you mentioned", unless it is literally in the conversation history.
 8. CALM, HUMAN RHYTHM. Contractions are fine ("it's", "don't"). Light, dry, helpful tone. No hype words (revolutionary, seamless, next-gen). No fear-mongering. No exclamation stacking.
-9. SCANNABLE IN CHAT. Bold the one thing the user must do. Explain only what they asked. Offer depth instead of dumping it.
+9. SCANNABLE IN CHAT. Bold the one thing the user must do. Explain only what they asked; offer depth instead of dumping it.
 10. MATCH THE USER'S REGISTER. Technical question gets a technical answer with a plain translation. Casual question gets casual words. Beginner question gets beginner words.
 
 SELF-CHECK BEFORE OUTPUT:
-Would a careful human security friend say it exactly like this, with only facts I can point to?
+"Would a careful human security friend say it exactly like this, with only facts I can point to?"
 
 ${factCardPrompt}
 On-Chain Context:
@@ -140,15 +148,9 @@ ${
           const finishReason = llmData.choices?.[0]?.finish_reason;
 
           if (reply) {
-            // Strip any accidental em dashes or entities
-            reply = reply
-              .replace(/—/g, ", ")
-              .replace(/–/g, ", ")
-              .replace(/&amp;/g, "&")
-              .replace(/&lt;/g, "<")
-              .replace(/&gt;/g, ">");
+            reply = sanitizeReply(reply);
             if (finishReason === "length") {
-              reply += `\n\n*(Answer capped for length. Say "continue" for the rest.)*`;
+              reply += `\n\n*(Answer capped for length, say "continue" for the rest.)*`;
             }
             return NextResponse.json({ reply });
           }
@@ -158,9 +160,9 @@ ${
       }
     }
 
-    // 2. Autonomous Deterministic Fallback Engine (Strict Shield Voice Rules)
+    // 2. Autonomous Deterministic Fallback Engine
     const reply = generateAutonomousSecurityReasoning(message, receipt);
-    return NextResponse.json({ reply });
+    return NextResponse.json({ reply: sanitizeReply(reply) });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "AI Reasoning error." },
@@ -170,7 +172,7 @@ ${
 }
 
 /**
- * Autonomous Security and Educational Reasoning Engine (Strict Shield Voice)
+ * Autonomous Security and Educational Reasoning Engine (Fallback)
  */
 function generateAutonomousSecurityReasoning(userPrompt: string, receipt?: ScanReceipt): string {
   const prompt = userPrompt.toLowerCase().trim();
@@ -206,5 +208,5 @@ function generateAutonomousSecurityReasoning(userPrompt: string, receipt?: ScanR
     return `🛡️ **Shield briefing for \`${address.slice(0, 8)}...${address.slice(-6)}\`:**\n\n• **Verdict:** **${receipt.verdict}** (${receipt.coverage.completed}/${receipt.coverage.total} checks completed).\n• **Type:** ${isEip7702 ? "Delegated wallet taking orders from a helper contract" : receipt.targetType === "contract" ? "Smart contract" : "Standard wallet"}.\n• **Activity:** ${txCount} transactions, ${balanceEth} balance at block #${Number(receipt.blockNumber).toLocaleString()}.\n• **Money trail:** ${isSweeper ? "Active sweeper bot detected. Deposits leave in seconds." : isTainted ? `Tainted by ${clusterName}.` : "Clean funding history."}\n• **Approvals:** ${approvalsCount} active token approvals.\n\n**Action:** ${isSweeper || isTainted ? "**Do not send funds.**" : "No red flags found in completed checks. Review evidence before transacting."}`;
   }
 
-  return `🛡️ **Shield AI Security Detective:**\n\nI watch on-chain evidence on Base Mainnet. Ask me about wallet safety, approvals, sweeper bots, or how any scan verdict was calculated.`;
+  return `🛡️ **Shield AI Security Detective:**\n\nI watch on-chain evidence on Base Mainnet. Ask me about wallet security, approvals, sweeper bots, or how any scan verdict was calculated.`;
 }
