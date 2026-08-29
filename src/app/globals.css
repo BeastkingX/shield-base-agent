@@ -3456,38 +3456,109 @@ details[open] > summary .chev {
 
 .scoreDisclosure summary {
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--blue-hi);
   user-select: none;
+  list-style: none;
+}
+
+.scoreDisclosure summary::-webkit-details-marker {
+  display: none;
 }
 
 .scoreDisclosure summary:hover {
   color: var(--blue);
 }
 
+/* Clean readable breakdown card: labels left, values right, subtle dividers. */
 .scoreBreakdown {
-  list-style: none;
   margin: 8px 0 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--ink);
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+}
+
+.scoreBreakdownHeader {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 2px 0 8px;
+}
+
+.scoreRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.scoreRowLabel {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--ink);
+  text-align: left;
+  flex: 0 0 auto;
+}
+
+.scoreRowValue {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.scoreRowFinal {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.scoreRowFinal .scoreRowLabel {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.scoreRowFinal .scoreRowValue {
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ink);
 }
 
 .scoreDisclosureNote {
   margin: 8px 0 0;
-  font-size: 10px;
+  font-family: var(--font-body);
+  font-size: 10.5px;
   color: var(--faint);
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+/* Mobile: keep rows readable, values right-aligned, no clipping or sideways overflow. */
+@media (max-width: 640px) {
+  .scoreBreakdown {
+    padding: 10px;
+  }
+  .scoreRow {
+    gap: 12px;
+  }
+  .scoreRowLabel {
+    min-width: 0;
+  }
+  .scoreRowValue {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 .vDanger {

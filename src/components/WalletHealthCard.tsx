@@ -147,29 +147,54 @@ export default function WalletHealthCard({
             </div>
           </div>
 
-          {/* Finding 13: visible calculation disclosure */}
+          {/* Finding 13: visible calculation disclosure — readable label/value rows */}
           <details className="scoreDisclosure">
             <summary>How this score was calculated</summary>
-            <ul className="scoreBreakdown">
-              <li>Starting score: {breakdown.startingScore.toLocaleString()}</li>
-              <li>
-                Warning checks: -{breakdown.warningPenaltyPer} × {breakdown.warningCount}
-              </li>
-              <li>
-                Danger checks: -{breakdown.dangerPenaltyPer} × {breakdown.dangerCount}
-              </li>
-              <li>
-                Coverage: {breakdown.coverageCompleted}/{breakdown.coverageTotal}
-              </li>
-              {breakdown.capped && breakdown.verdictCeiling !== null && (
-                <li>
-                  Verdict ceiling: {receipt.verdict} caps at {breakdown.verdictCeiling}
-                </li>
+            <div className="scoreBreakdown">
+              <div className="scoreBreakdownHeader">Score method</div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Starting score</span>
+                <span className="scoreRowValue">{breakdown.startingScore.toLocaleString()}</span>
+              </div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Warning checks</span>
+                <span className="scoreRowValue">
+                  -{breakdown.warningPenaltyPer} × {breakdown.warningCount} = -{breakdown.warningPenaltyTotal}
+                </span>
+              </div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Danger checks</span>
+                <span className="scoreRowValue">
+                  -{breakdown.dangerPenaltyPer} × {breakdown.dangerCount} = -{breakdown.dangerPenaltyTotal}
+                </span>
+              </div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Coverage</span>
+                <span className="scoreRowValue">
+                  {breakdown.coverageCompleted}/{breakdown.coverageTotal}
+                </span>
+              </div>
+
+              {breakdown.verdictCeiling !== null && (
+                <div className="scoreRow">
+                  <span className="scoreRowLabel">Verdict ceiling</span>
+                  <span className="scoreRowValue">
+                    {receipt.verdict} ≤ {breakdown.verdictCeiling}
+                  </span>
+                </div>
               )}
-              <li>
-                Final observed evidence score: {evidenceScore === null ? "—" : evidenceScore}
-              </li>
-            </ul>
+
+              <div className="scoreRow scoreRowFinal">
+                <span className="scoreRowLabel">Final evidence score</span>
+                <span className="scoreRowValue">
+                  {evidenceScore === null ? "—" : `${evidenceScore} / 1,000`}
+                </span>
+              </div>
+            </div>
             <p className="scoreDisclosureNote">
               This is a scan-level summary of observed evidence. It is not a guarantee,
               identity rating, or permanent reputation.
