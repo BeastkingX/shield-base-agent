@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
 import { shortAddress } from "@/lib/wallet";
+import { calculateEvidenceScore, type EvidenceScoreTone } from "@/lib/evidence-score";
 import Icon from "./Icon";
 
 interface WalletHealthCardProps {
@@ -29,11 +30,16 @@ export default function WalletHealthCard({
       .catch(() => {});
   }, []);
 
-  const isSweeper = receipt.clusterAnalysis?.isSweeperActive;
-  const isTainted = receipt.clusterAnalysis?.hasTaint;
+  const cluster = receipt.clusterAnalysis;
+  const isSweeper = cluster?.isSweeperActive ?? false;
+  const hasTaint = cluster?.hasTaint ?? false;
+  const taintSeverity = cluster?.taintSeverity ?? "none";
+  // Finding 12: a "warning" taint is NOT danger. Only "critical" taint or an
+  // active sweeper may use danger styling; a recent-forwarding warning is amber.
+  const isCriticalTaint = hasTaint && taintSeverity === "critical";
+  const isWarningTaint = hasTaint && taintSeverity === "warning";
   const approvalsCount = receipt.approvalsSummary?.totalCount || 0;
   const unlimitedCount = receipt.approvalsSummary?.unlimitedCount || 0;
-  const warningCount = receipt.evidence.filter((e) => e.status === "warning").length;
 
   // Derive native ETH balance
   const balanceEvidence = receipt.evidence.find((e) => e.id === "EVIDENCE_NATIVE_BALANCE");
@@ -41,74 +47,27 @@ export default function WalletHealthCard({
   const balanceEthNum = parseFloat(rawBalanceEthStr.replace(" ETH", "")) || 0;
   const balanceUsd = (balanceEthNum * ethPrice).toFixed(2);
 
-  // Derive txCount
-  const txCountItem = receipt.evidence.find((e) => e.id === "EVIDENCE_TRANSACTION_COUNT");
-  const txCount = (txCountItem?.facts?.["Transaction count"] as number) || 0;
-
   // Honesty fix: check for incomplete coverage / money trail unavailable
   const hasUnavailable = receipt.coverage.unavailable > 0;
   const moneyTrailEvidence = receipt.evidence.find((e) => e.id === "EVIDENCE_MONEY_TRAIL");
   const isMoneyTrailUnavailable = moneyTrailEvidence?.status === "unavailable";
-  const clusterStatus = receipt.clusterAnalysis?.analysisStatus;
+  const clusterStatus = cluster?.analysisStatus;
   const isClusterIncomplete = clusterStatus !== "completed";
   const isIncomplete = hasUnavailable || isClusterIncomplete || isMoneyTrailUnavailable;
 
-  // Rule 3: 1,000-Point Score strictly derived from deterministic verdict + evidence
-  // Finding 9: when coverage.unavailable>0 or clusterAnalysis not completed, never show 950/Prime Trust/Secure Clean 2-Hop
-  const isDanger = receipt.verdict === "HIGH OBSERVED RISK" || isSweeper || isTainted;
-  const isCaution = receipt.verdict === "CAUTION";
-  const isLowRisk = receipt.verdict === "LOW OBSERVED RISK";
+  // Finding 13: deterministic Observed Evidence Score (pure function), no
+  // hard-coded reputation numbers and no balance/tx-count bonus. The verdict
+  // stays authoritative; the score is display-only.
+  const scoreResult = calculateEvidenceScore(receipt);
+  const { score: evidenceScore, breakdown, grade, tone, note: scoreNote } = scoreResult;
 
-  const { reputationScore, reputationGrade, scoreTone } = (() => {
-    if (isDanger) {
-      const score = isSweeper ? 0 : 120;
-      return {
-        reputationScore: String(score),
-        reputationGrade: "Tier 5 · Critical Hazard / Blacklisted",
-        scoreTone: "danger",
-      };
-    }
-    // Incomplete checks: never claim Prime Trust / 950 / Secure Clean 2-Hop
-    if (isIncomplete) {
-      if (isMoneyTrailUnavailable) {
-        return {
-          reputationScore: "—",
-          reputationGrade: "Incomplete checks (Money trail unavailable)",
-          scoreTone: "incomplete",
-        };
-      }
-      return {
-        reputationScore: "—",
-        reputationGrade: hasUnavailable
-          ? `Incomplete checks (${receipt.coverage.unavailable} unavailable)`
-          : "Unrated · Score unavailable",
-        scoreTone: "incomplete",
-      };
-    }
-    if (isCaution) {
-      const score = warningCount >= 2 ? 450 : 600;
-      const tier = warningCount >= 2 ? "Tier 4 · Caution" : "Tier 3 · Review Required";
-      return {
-        reputationScore: String(score),
-        reputationGrade: tier,
-        scoreTone: "warn",
-      };
-    }
-    if (isLowRisk) {
-      const score = approvalsCount === 0 && txCount >= 20 ? 950 : 800;
-      const tier = score >= 900 ? "Tier 1 · Prime Trust (A+)" : "Tier 2 · Verified & Active (A)";
-      return {
-        reputationScore: String(score),
-        reputationGrade: tier,
-        scoreTone: "safe",
-      };
-    }
-    return {
-      reputationScore: "—",
-      reputationGrade: "Unrated",
-      scoreTone: "muted",
-    };
-  })();
+  const toneClasses: Record<EvidenceScoreTone, { score: string; grade: string }> = {
+    safe: { score: "", grade: "vSafe" },
+    warn: { score: "scoreWarn", grade: "vWarn" },
+    danger: { score: "scoreDanger", grade: "vDanger" },
+    incomplete: { score: "scoreIncomplete", grade: "vIncomplete" },
+    muted: { score: "scoreUnrated", grade: "vMuted" },
+  };
 
   const securityHealth = (() => {
     if (isSweeper) {
@@ -117,9 +76,9 @@ export default function WalletHealthCard({
         tone: "vDanger",
       };
     }
-    if (isTainted) {
+    if (isCriticalTaint) {
       return {
-        text: `Drainer Cluster Taint (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"})`,
+        text: `Drainer Cluster Taint (${cluster?.clusterTaintName || "Phishing Network"})`,
         tone: "vDanger",
       };
     }
@@ -137,7 +96,13 @@ export default function WalletHealthCard({
         tone: "vIncomplete",
       };
     }
-    if (isCaution) {
+    if (isWarningTaint) {
+      return {
+        text: "Review required (recent rapid forwarding)",
+        tone: "vWarn",
+      };
+    }
+    if (receipt.verdict === "CAUTION") {
       return {
         text: "Review Required (1+ Warnings Fired)",
         tone: "vWarn",
@@ -166,21 +131,50 @@ export default function WalletHealthCard({
           </div>
         </div>
 
-        {/* 1,000-Point Institutional Reputation Score Meter */}
-        <div className="reputationScoreBox">
-          <div className="scoreNumber">
-            <span className={`scoreValue ${scoreTone === "incomplete" ? "scoreIncomplete" : scoreTone === "muted" ? "scoreUnrated" : ""}`}>{reputationScore}</span>
-            <span className="scoreMax">/ 1,000</span>
+        {/* Observed Evidence Score — scan-level summary, not a reputation/trust rating */}
+        <div className="scoreArea">
+          <div className="reputationScoreBox">
+            <div className="scoreNumber">
+              <span className={`scoreValue ${toneClasses[tone].score}`}>
+                {evidenceScore === null ? "—" : evidenceScore}
+              </span>
+              <span className="scoreMax">/ 1,000</span>
+            </div>
+            <div className="scoreMeta">
+              <strong>Observed Evidence Score</strong>
+              <span className={toneClasses[tone].grade}>{grade}</span>
+              <small className="scoreSubNote">{scoreNote}</small>
+            </div>
           </div>
-          <div className="scoreMeta">
-            <strong>Reputation Score</strong>
-            <span>{reputationGrade}</span>
-            <small className="scoreSubNote">
-              {isIncomplete
-                ? "Score unavailable due to incomplete checks, not rated as secure."
-                : "Score computed from this scan's fired rules."}
-            </small>
-          </div>
+
+          {/* Finding 13: visible calculation disclosure */}
+          <details className="scoreDisclosure">
+            <summary>How this score was calculated</summary>
+            <ul className="scoreBreakdown">
+              <li>Starting score: {breakdown.startingScore.toLocaleString()}</li>
+              <li>
+                Warning checks: -{breakdown.warningPenaltyPer} × {breakdown.warningCount}
+              </li>
+              <li>
+                Danger checks: -{breakdown.dangerPenaltyPer} × {breakdown.dangerCount}
+              </li>
+              <li>
+                Coverage: {breakdown.coverageCompleted}/{breakdown.coverageTotal}
+              </li>
+              {breakdown.capped && breakdown.verdictCeiling !== null && (
+                <li>
+                  Verdict ceiling: {receipt.verdict} caps at {breakdown.verdictCeiling}
+                </li>
+              )}
+              <li>
+                Final observed evidence score: {evidenceScore === null ? "—" : evidenceScore}
+              </li>
+            </ul>
+            <p className="scoreDisclosureNote">
+              This is a scan-level summary of observed evidence. It is not a guarantee,
+              identity rating, or permanent reputation.
+            </p>
+          </details>
         </div>
       </div>
 

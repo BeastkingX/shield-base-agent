@@ -30,15 +30,18 @@ describe("Finding 9: WalletHealthCard honesty for incomplete checks", () => {
     expect(content).toContain("vIncomplete");
   });
 
-  it("score displays — when unavailable, not 950", () => {
+  it("renders — (not a high number) when score is unavailable", () => {
     const content = fs.readFileSync("src/components/WalletHealthCard.tsx", "utf8");
-    expect(content).toContain('reputationScore: "—"');
+    expect(content).toContain('evidenceScore === null ? "—"');
     expect(content).toContain("scoreIncomplete");
   });
 
-  it("does not fabricate clean when unavailable", () => {
-    const content = fs.readFileSync("src/components/WalletHealthCard.tsx", "utf8");
-    expect(content).toContain("not rated as secure");
-    expect(content).toContain("Score unavailable due to incomplete checks");
+  it("delegates incomplete scoring to calculateEvidenceScore, which never fabricates clean", () => {
+    const component = fs.readFileSync("src/components/WalletHealthCard.tsx", "utf8");
+    expect(component).toContain("calculateEvidenceScore");
+    expect(component).toContain("Observed Evidence Score");
+    const scoreLib = fs.readFileSync("src/lib/evidence-score.ts", "utf8");
+    expect(scoreLib.toLowerCase()).toContain("not rated as secure");
+    expect(scoreLib).toContain("Score unavailable");
   });
 });

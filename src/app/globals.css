@@ -3432,6 +3432,64 @@ details[open] > summary .chev {
   color: var(--faint) !important;
 }
 
+/* Finding 13: Observed Evidence Score — tone colors + calculation disclosure */
+.scoreValue.scoreWarn {
+  color: var(--amber) !important;
+}
+
+.scoreValue.scoreDanger {
+  color: var(--red) !important;
+}
+
+.scoreArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 380px;
+}
+
+.scoreDisclosure {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.scoreDisclosure summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue-hi);
+  user-select: none;
+}
+
+.scoreDisclosure summary:hover {
+  color: var(--blue);
+}
+
+.scoreBreakdown {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scoreDisclosureNote {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: var(--faint);
+  line-height: 1.4;
+}
+
 .vDanger {
   color: var(--red);
 }
