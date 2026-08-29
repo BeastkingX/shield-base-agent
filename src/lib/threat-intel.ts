@@ -49,7 +49,7 @@ async function fetchGoPlus(address: string, chainId: string): Promise<ThreatSour
     const url = `https://api.gopluslabs.io/api/v1/address_security/${address}?chain_id=${chainId}`;
     const res = await fetch(url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(3500),
       headers: { "User-Agent": "Shield-Agent/1.0" },
     });
 
@@ -62,7 +62,19 @@ async function fetchGoPlus(address: string, chainId: string): Promise<ThreatSour
       };
     }
 
-    const data = await res.json();
+    // Safely handle non-JSON (e.g. Cloudflare HTML) – do not let SyntaxError crash the scan
+    let data: any = null;
+    try {
+      const text = await res.text();
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      return {
+        status: "unavailable",
+        dangerHits: [],
+        warnHits: [],
+        detail: "Non-JSON response from GoPlus",
+      };
+    }
     if (data?.code === 1 && data?.result) {
       const r = data.result as Record<string, string>;
       const dangerHits = DANGER_KEYS.filter((k) => r[k] === "1");
@@ -123,12 +135,19 @@ async function fetchScamSnifferList(): Promise<Set<string> | null> {
     const url = "https://raw.githubusercontent.com/scamsniffer/scam-database/main/blacklist/address.json";
     const res = await fetch(url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(3500),
       headers: { "User-Agent": "Shield-Agent/1.0" },
     });
 
     if (res.ok) {
-      const rawList = await res.json();
+      let rawList: any = null;
+      try {
+        const text = await res.text();
+        rawList = text ? JSON.parse(text) : null;
+      } catch {
+        // Non-JSON from GitHub (rate limit HTML) – treat as unavailable, use cache if present
+        return scamSnifferCache ? scamSnifferCache.list : null;
+      }
       if (Array.isArray(rawList)) {
         const addressSet = new Set(rawList.map((a: string) => String(a).toLowerCase()));
         scamSnifferCache = { list: addressSet, cachedAt: now };

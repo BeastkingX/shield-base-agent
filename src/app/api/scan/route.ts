@@ -7,13 +7,25 @@ import {
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * A full Shield scan reads Base RPC, indexed history, approvals and threat
  * intel, and every provider call now carries a bounded retry policy. 30s keeps
  * the retries inside the platform limit instead of being killed mid-flight.
+ * We also race the scan against a hard budget so that even if a provider
+ * stalls, we return JSON (never a platform HTML page).
  */
 export const maxDuration = 30;
+const SCAN_HARD_BUDGET_MS = 26_000;
+
+function timeoutError(): Error {
+  const err = new Error(
+    "Scan timed out while collecting on-chain evidence. No safety conclusion was produced; please try again.",
+  );
+  err.name = "ScanTimeoutError";
+  return err;
+}
 
 export async function POST(request: NextRequest) {
   const ip = clientIp(request);
@@ -27,7 +39,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const address = parseScanInput(body);
-    const receipt = await runShieldScan(address);
+
+    // Race the scan against a hard budget so Vercel never returns a non-JSON
+    // platform error page. The timeout is caught below and turned into a
+    // 504 JSON error with a truthful message (no invented verdict).
+    const receipt = await Promise.race([
+      runShieldScan(address),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(timeoutError()), SCAN_HARD_BUDGET_MS),
+      ),
+    ]);
 
     return NextResponse.json(receipt, {
       headers: { "Cache-Control": "no-store" },
@@ -44,13 +65,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (error instanceof Error && error.name === "ScanTimeoutError") {
+      console.error("Shield scan timed out", error);
+      return NextResponse.json(
+        { error: error.message },
+        { status: 504, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     console.error("Shield scan failed", error);
     return NextResponse.json(
       {
         error:
           "Shield could not complete the Base scan. No safety conclusion was produced; please try again.",
       },
-      { status: 502 },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
 }

@@ -225,8 +225,29 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: trimmed }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "The scan failed.");
+
+      // Safely handle non-JSON platform errors (e.g. Vercel "An error occurred..." HTML).
+      // Never surface a raw JSON parse SyntaxError to the user; preserve the underlying failure text.
+      let data: any = null;
+      let rawText = "";
+      try {
+        rawText = await response.text();
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        const snippet = (rawText || "").slice(0, 500).trim();
+        // If the platform returned HTML/text starting with "An error...", surface it as a scan failure
+        // without inventing a verdict. Keep the original text for debugging.
+        if (snippet) {
+          throw new Error(
+            snippet.toLowerCase().startsWith("an error")
+              ? `Scan service returned a non-JSON error: ${snippet}`
+              : snippet,
+          );
+        }
+        throw new Error(`Scan service returned non-JSON response (HTTP ${response.status})`);
+      }
+
+      if (!response.ok) throw new Error(data?.error || `The scan failed (HTTP ${response.status}).`);
 
       setStage(2, "done");
       setStage(3, "active");
@@ -330,8 +351,10 @@ export default function Home() {
    * Fastest measured outflow, split into value / qualifier so the number is
    * never mashed together with its meaning. Never reports "clean" for data
    * that could not be measured.
+   * Precision fix: when recentRapidForwarding is true but isSweeperActive is false,
+   * qualifier must be "(fast-forwarding)" with warning color, not clean.
    */
-  const outflowStat: { value: string; tag: string; tone: "danger" | "safe" | "muted" } =
+  const outflowStat: { value: string; tag: string; tone: "danger" | "safe" | "muted" | "warning" } =
     (() => {
       const cluster = receipt?.clusterAnalysis;
 
@@ -340,9 +363,27 @@ export default function Home() {
       }
 
       const seconds = cluster.sweepVelocitySeconds;
+      const recentRapid = cluster.recentRapidForwarding === true;
+      const isSweeper = cluster.isSweeperActive === true;
+
+      // Recent rapid forwarding but not proven sweeper: show fastest recent delta as fast-forwarding with warning tone
+      if (recentRapid && !isSweeper) {
+        const recentDeltas = cluster.recentDeltas || [];
+        const fastestRecent =
+          recentDeltas.length > 0 ? Math.min(...recentDeltas) : typeof seconds === "number" ? seconds : null;
+
+        let value: string;
+        if (fastestRecent === null) value = "—";
+        else if (fastestRecent < 60) value = `${fastestRecent}s`;
+        else if (fastestRecent < 3600) value = `${Math.round(fastestRecent / 60)}m`;
+        else if (fastestRecent < 86400) value = `${(fastestRecent / 3600).toFixed(1)}h`;
+        else value = `${Math.round(fastestRecent / 86400)}d`;
+
+        return { value, tag: "fast-forwarding", tone: "warning" };
+      }
 
       if (typeof seconds === "number") {
-        const fastForwarding = seconds <= 120 || cluster.isSweeperActive === true;
+        const fastForwarding = seconds <= 120 || isSweeper;
         let value: string;
         if (seconds < 60) value = `${seconds}s`;
         else if (seconds < 3600) value = `${Math.round(seconds / 60)}m`;
@@ -360,7 +401,7 @@ export default function Home() {
         };
       }
 
-      if (cluster.isSweeperActive) {
+      if (isSweeper) {
         return { value: "<8s", tag: "fast-forwarding", tone: "danger" };
       }
 
@@ -936,7 +977,9 @@ export default function Home() {
 
       {/* Floating Chat Dock Launcher */}
       <div className="dock">
-        <span className="docknote">grounded in the receipt (never guesses)</span>
+        {isChatDockOpen && (
+          <span className="docknote">grounded in the receipt (never guesses)</span>
+        )}
         <button
           className="dockbtn"
           type="button"

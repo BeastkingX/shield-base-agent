@@ -44,13 +44,16 @@ const GAS_HINT_WEI = BigInt("500000000000000"); // 0.0005 ETH
 const SWEEP_THRESHOLD_SECONDS = 30;
 const RAPID_FORWARD_SECONDS = 120;
 const MIN_VELOCITY_SAMPLES = 2;
-const TARGET_WINDOW = 50;
-const HOP_WINDOW = 25;
+const TARGET_WINDOW = 30;
+const HOP_WINDOW = 10;
 /**
  * Shared retry budget for one history window. analyzeClusterTaint reads up to
- * four windows, so this stays well inside the scan route's `maxDuration`.
+ * four windows (earliest+recent parallel, funder+hub parallel), so total worst
+ * is 2*budget. Reduced from 6s to 4s to stay inside Vercel's 26s hard budget
+ * when wallet path also runs history+approvals+threat in parallel.
+ * Honest partial-mode: if earliest window times out, recent window still counts.
  */
-const HISTORY_BUDGET_MS = 10_000;
+const HISTORY_BUDGET_MS = 4_000;
 
 interface IndexedTx {
   hash: string;
@@ -90,7 +93,7 @@ async function requestCompatTxList(
     url,
     { cache: "no-store" },
     {
-      timeoutMs: 3500,
+      timeoutMs: 2500,
       attempts: options.attempts,
       deadlineAt: options.deadlineAt,
       label: `Blockscout txlist (${options.withKey ? "keyed" : "keyless"})`,
@@ -99,11 +102,17 @@ async function requestCompatTxList(
 
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-  const body = (await response.json()) as {
-    status?: string;
-    message?: string;
-    result?: unknown;
-  };
+  let body: { status?: string; message?: string; result?: unknown };
+  try {
+    const text = await response.text();
+    body = (text ? JSON.parse(text) : {}) as {
+      status?: string;
+      message?: string;
+      result?: unknown;
+    };
+  } catch {
+    throw new Error(`compatibility route returned non-JSON`);
+  }
 
   if (body.status === "1" && Array.isArray(body.result)) {
     return body.result as IndexedTx[];
@@ -160,7 +169,7 @@ async function fetchTxList(
       restUrl,
       { cache: "no-store" },
       {
-        timeoutMs: 3500,
+        timeoutMs: 2500,
         attempts: RETRY_ATTEMPTS,
         deadlineAt,
         label: "Blockscout REST v2",
@@ -168,7 +177,13 @@ async function fetchTxList(
     );
     if (!response.ok) throw new Error(`REST API HTTP ${response.status}`);
 
-    const body = await response.json();
+    let body: any = null;
+    try {
+      const text = await response.text();
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error("REST API returned non-JSON");
+    }
     if (Array.isArray(body.items)) {
       const mapped: IndexedTx[] = body.items.map((it: any) => ({
         hash: it.hash || "",
