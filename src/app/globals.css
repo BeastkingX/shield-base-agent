@@ -2327,13 +2327,30 @@ details[open] > summary .chev {
     margin-left: 0;
     width: 100%;
   }
+  /* Finding 14: mobile WHY THIS VERDICT readability — keep evidence, ease scanning */
   .herofind {
-    padding: 16px 14px;
+    padding: 15px 14px;
+    margin-bottom: 26px;
+  }
+  .herofind .kicker {
+    margin-bottom: 10px;
+    letter-spacing: 0.12em;
   }
   .herofind .title {
-    font-size: 15.5px;
+    font-size: 14.5px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .herofind .detail {
+    font-size: 12px;
+    line-height: 1.45;
+    margin-top: 10px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .herofind .idtag {
+    margin-top: 14px;
     font-size: 11.5px;
   }
   .evidenceRow {

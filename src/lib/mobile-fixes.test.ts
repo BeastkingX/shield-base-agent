@@ -69,3 +69,40 @@ describe("Finding 7: Verdict log freshness", () => {
     expect(lib).toContain("stat.mtime");
   });
 });
+
+describe("Finding 14: mobile WHY THIS VERDICT card readability", () => {
+  const css = fs.readFileSync("src/app/globals.css", "utf8");
+
+  it("keeps the flagship claim text 14-15px with comfortable line-height on mobile", () => {
+    expect(css).toContain(".herofind .title");
+    // 14.5px sits in the required 14-15px range
+    expect(css).toContain("font-size: 14.5px");
+    expect(css).toContain("line-height: 1.45");
+  });
+
+  it("keeps card padding around 14-16px and clear vertical gaps", () => {
+    expect(css).toContain(".herofind");
+    // padding 15px 14px and spacing between kicker/claim/facts/id
+    expect(css).toContain("padding: 15px 14px");
+    expect(css).toContain("margin-top: 10px");
+    expect(css).toContain("margin-top: 14px");
+  });
+
+  it("allows claim and facts to wrap with no horizontal overflow", () => {
+    expect(css).toContain("overflow-wrap: anywhere");
+    expect(css).toContain("word-break: break-word");
+  });
+
+  it("gives the card bottom margin for scroll clearance above fixed controls", () => {
+    expect(css).toContain("margin-bottom: 26px");
+  });
+
+  it("does not alter the flagship finding markup or evidence meaning", () => {
+    const page = fs.readFileSync("src/app/page.tsx", "utf8");
+    // The claim + facts + evidence id are still rendered unchanged
+    expect(page).toContain("Why this verdict");
+    expect(page).toContain("flagshipFinding.claim");
+    expect(page).toContain("flagshipFinding.facts");
+    expect(page).toContain("flagshipFinding.id");
+  });
+});
