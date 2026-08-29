@@ -101,7 +101,7 @@ export async function fetchApprovalsForWallet(ownerAddress: Address): Promise<Ap
     logs = loadProbeLogs();
   }
 
-  // If no logs, try live query
+  // If no logs, try live query – safely handle non-JSON platform errors
   if (logs.length === 0) {
     try {
       const paddedOwner = "0x000000000000000000000000" + normalizedOwner.replace(/^0x/, "");
@@ -109,13 +109,19 @@ export async function fetchApprovalsForWallet(ownerAddress: Address): Promise<Ap
 
       const response = await fetch(url, {
         headers: { "User-Agent": "Shield-Agent/1.0" },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(4000),
         cache: "no-store",
       });
 
       if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data.result) && data.result.length > 0) {
+        let data: any = null;
+        try {
+          const text = await response.text();
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data && Array.isArray(data.result) && data.result.length > 0) {
           logs = data.result;
         }
       }

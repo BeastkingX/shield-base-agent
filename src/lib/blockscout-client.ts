@@ -17,13 +17,14 @@ const BLOCKSCOUT_REST_URL = "https://api.blockscout.com/8453/api/v2";
 const BLOCKSCOUT_KEYLESS_URL = "https://base.blockscout.com/api";
 const BASE_CHAIN_ID = "8453";
 
-/** Per-attempt network timeout for history routes. */
-const ATTEMPT_TIMEOUT_MS = 5_000;
+/** Per-attempt network timeout for history routes. Reduced to stay inside Vercel budget. */
+const ATTEMPT_TIMEOUT_MS = 3_500;
 /**
  * Shared wall-clock budget for every Blockscout route inside one call, so the
  * retry policy can never outlast the API route's `maxDuration`.
+ * Reduced from 20s to 12s to prevent platform non-JSON timeouts.
  */
-const ROUTE_BUDGET_MS = 20_000;
+const ROUTE_BUDGET_MS = 12_000;
 
 const envelopeSchema = z.object({
   status: z.string(),

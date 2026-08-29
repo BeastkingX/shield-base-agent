@@ -225,8 +225,29 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: trimmed }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "The scan failed.");
+
+      // Safely handle non-JSON platform errors (e.g. Vercel "An error occurred..." HTML).
+      // Never surface a raw JSON parse SyntaxError to the user; preserve the underlying failure text.
+      let data: any = null;
+      let rawText = "";
+      try {
+        rawText = await response.text();
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        const snippet = (rawText || "").slice(0, 500).trim();
+        // If the platform returned HTML/text starting with "An error...", surface it as a scan failure
+        // without inventing a verdict. Keep the original text for debugging.
+        if (snippet) {
+          throw new Error(
+            snippet.toLowerCase().startsWith("an error")
+              ? `Scan service returned a non-JSON error: ${snippet}`
+              : snippet,
+          );
+        }
+        throw new Error(`Scan service returned non-JSON response (HTTP ${response.status})`);
+      }
+
+      if (!response.ok) throw new Error(data?.error || `The scan failed (HTTP ${response.status}).`);
 
       setStage(2, "done");
       setStage(3, "active");
@@ -936,7 +957,9 @@ export default function Home() {
 
       {/* Floating Chat Dock Launcher */}
       <div className="dock">
-        <span className="docknote">grounded in the receipt (never guesses)</span>
+        {isChatDockOpen && (
+          <span className="docknote">grounded in the receipt (never guesses)</span>
+        )}
         <button
           className="dockbtn"
           type="button"

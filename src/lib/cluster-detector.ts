@@ -49,8 +49,10 @@ const HOP_WINDOW = 25;
 /**
  * Shared retry budget for one history window. analyzeClusterTaint reads up to
  * four windows, so this stays well inside the scan route's `maxDuration`.
+ * Reduced from 10s to 6s to prevent Vercel platform timeouts that previously
+ * returned non-JSON "An error occurred..." pages for flagged addresses.
  */
-const HISTORY_BUDGET_MS = 10_000;
+const HISTORY_BUDGET_MS = 6_000;
 
 interface IndexedTx {
   hash: string;
@@ -90,7 +92,7 @@ async function requestCompatTxList(
     url,
     { cache: "no-store" },
     {
-      timeoutMs: 3500,
+      timeoutMs: 3000,
       attempts: options.attempts,
       deadlineAt: options.deadlineAt,
       label: `Blockscout txlist (${options.withKey ? "keyed" : "keyless"})`,
@@ -99,11 +101,17 @@ async function requestCompatTxList(
 
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-  const body = (await response.json()) as {
-    status?: string;
-    message?: string;
-    result?: unknown;
-  };
+  let body: { status?: string; message?: string; result?: unknown };
+  try {
+    const text = await response.text();
+    body = (text ? JSON.parse(text) : {}) as {
+      status?: string;
+      message?: string;
+      result?: unknown;
+    };
+  } catch {
+    throw new Error(`compatibility route returned non-JSON`);
+  }
 
   if (body.status === "1" && Array.isArray(body.result)) {
     return body.result as IndexedTx[];
@@ -160,7 +168,7 @@ async function fetchTxList(
       restUrl,
       { cache: "no-store" },
       {
-        timeoutMs: 3500,
+        timeoutMs: 3000,
         attempts: RETRY_ATTEMPTS,
         deadlineAt,
         label: "Blockscout REST v2",
@@ -168,7 +176,13 @@ async function fetchTxList(
     );
     if (!response.ok) throw new Error(`REST API HTTP ${response.status}`);
 
-    const body = await response.json();
+    let body: any = null;
+    try {
+      const text = await response.text();
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error("REST API returned non-JSON");
+    }
     if (Array.isArray(body.items)) {
       const mapped: IndexedTx[] = body.items.map((it: any) => ({
         hash: it.hash || "",

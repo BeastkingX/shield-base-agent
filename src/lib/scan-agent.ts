@@ -189,8 +189,15 @@ async function getThreatFlags(
 ): Promise<{ dangerHits: string[]; warnHits: string[]; dataSource: string } | null> {
   try {
     const gpUrl = `https://api.gopluslabs.io/api/v1/address_security/${targetAddress}?chain_id=8453`;
-    const gpRes = await fetch(gpUrl, { cache: "no-store", signal: AbortSignal.timeout(6_000) });
-    const gp = await gpRes.json();
+    const gpRes = await fetch(gpUrl, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
+    // Safely handle non-JSON (GoPlus occasionally returns HTML on rate limit)
+    let gp: any = null;
+    try {
+      const text = await gpRes.text();
+      gp = text ? JSON.parse(text) : null;
+    } catch {
+      return null;
+    }
     if (gpRes.ok && gp?.code === 1 && gp?.result) {
       const r = gp.result as Record<string, string>;
       const dangerKeys = [
@@ -224,7 +231,11 @@ async function getThreatFlags(
 export async function runShieldScan(address: Address): Promise<ScanReceipt> {
   const scannedAt = new Date().toISOString();
   let approvalsSummary: ApprovalsSummary | undefined;
-  const clusterAnalysis = await analyzeClusterTaint(address);
+
+  // Start cluster analysis in parallel with chain reads so a slow Blockscout
+  // history for flagged addresses does not block the entire scan and cause
+  // Vercel to return a non-JSON platform error.
+  const clusterAnalysisPromise = analyzeClusterTaint(address);
 
   const [chainId, blockNumber] = await Promise.all([
     baseClient.getChainId(),
@@ -235,9 +246,13 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     throw new Error(`Connected RPC returned chain ID ${chainId}, not Base mainnet.`);
   }
 
-  const [block, code] = await Promise.all([
+  // Run block + code + cluster analysis in parallel to stay inside Vercel's
+  // maxDuration and avoid returning a non-JSON platform error for slow
+  // flagged addresses like 0x00000c07575bb4e64457687a0382b4d3ea470000.
+  const [block, code, clusterAnalysis] = await Promise.all([
     baseClient.getBlock({ blockNumber }),
     baseClient.getCode({ address, blockNumber }),
+    clusterAnalysisPromise,
   ]);
 
   const normalizedCode = code || "0x";
