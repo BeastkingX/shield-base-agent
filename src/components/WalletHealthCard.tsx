@@ -256,11 +256,99 @@ export default function WalletHealthCard({
             type="button"
             className="ghostbtn"
             onClick={onToggleTechnicalEvidence}
+            aria-expanded={showTechnicalEvidence}
+            aria-controls="raw-evidence-panel"
           >
             {showTechnicalEvidence ? "Hide Raw Evidence ▲" : "Inspect Raw Evidence ▼"}
           </button>
         </div>
       </div>
+
+      {/* Raw scan evidence panel — public technical facts only (no credentials) */}
+      {showTechnicalEvidence && (
+        <div
+          className="rawEvidencePanel"
+          id="raw-evidence-panel"
+          data-testid="raw-evidence-panel"
+        >
+          <div className="rawEvidenceHeader">
+            <span className="rawEvidenceTitle">Raw scan evidence</span>
+            <span className="rawEvidenceSub">
+              Public technical facts only — no private keys, seed phrases, API keys, or credentials.
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Receipt hash</span>
+            <span className="rawFactValue">
+              {receipt.receiptHash
+                ? `${receipt.receiptHash.slice(0, 18)}…${receipt.receiptHash.slice(-8)}`
+                : "Not available"}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Coverage</span>
+            <span className="rawFactValue">
+              {receipt.coverage.completed}/{receipt.coverage.total} completed
+              {receipt.coverage.unavailable > 0
+                ? ` · ${receipt.coverage.unavailable} unavailable`
+                : ""}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Scanned block</span>
+            <span className="rawFactValue">
+              #{Number(receipt.blockNumber).toLocaleString()}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Cluster-analysis status</span>
+            <span className="rawFactValue">
+              {cluster?.analysisStatus ?? "unavailable"}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Recent deltas</span>
+            <span className="rawFactValue">
+              {cluster?.recentDeltas?.length
+                ? cluster.recentDeltas.join(", ")
+                : "none measured"}
+            </span>
+          </div>
+
+          <div className="rawSectionTitle">Evidence IDs &amp; statuses</div>
+          <ul className="rawEvidenceList">
+            {receipt.evidence.map((item) => (
+              <li key={item.id} className="rawEvidenceRow">
+                <span className={`rawStatus rawStatus-${item.status}`}>
+                  {item.status}
+                </span>
+                <span className="rawEvidenceId">{item.id}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="rawSectionTitle">Approvals summary</div>
+          <div className="rawFact">
+            <span className="rawFactLabel">Total approvals</span>
+            <span className="rawFactValue">{approvalsCount}</span>
+          </div>
+          <div className="rawFact">
+            <span className="rawFactLabel">Unlimited approvals</span>
+            <span className="rawFactValue">{unlimitedCount}</span>
+          </div>
+          <div className="rawFact">
+            <span className="rawFactLabel">High-risk approvals</span>
+            <span className="rawFactValue">
+              {receipt.approvalsSummary?.highRiskCount ?? 0}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

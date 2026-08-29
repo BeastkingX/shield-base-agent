@@ -3594,3 +3594,166 @@ details[open] > summary .chev {
   color: var(--amber);
   font-style: italic;
 }
+
+/* ==========================================================================
+   Raw scan evidence panel (Inspect/Hide Raw Evidence toggle)
+   Public technical facts only. Scrollable + mobile-safe, no sideways overflow.
+   ========================================================================== */
+
+.rawEvidencePanel {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg2);
+  padding: 14px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rawEvidenceHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rawEvidenceTitle {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.rawEvidenceSub {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.45;
+}
+
+.rawFact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rawFactLabel {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  text-align: left;
+}
+
+.rawFactValue {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.rawSectionTitle {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-top: 6px;
+}
+
+.rawEvidenceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rawEvidenceRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rawEvidenceRow:last-child {
+  border-bottom: none;
+}
+
+.rawStatus {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.rawStatus-pass {
+  color: var(--green);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.rawStatus-warning {
+  color: var(--amber);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.rawStatus-danger {
+  color: var(--red);
+  border-color: rgba(251, 75, 99, 0.4);
+}
+.rawStatus-info {
+  color: var(--blue-hi);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+.rawStatus-unavailable {
+  color: var(--faint);
+  border-color: var(--line);
+}
+
+.rawEvidenceId {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+/* Mobile: keep facts stacked and wrap values with no clipping */
+@media (max-width: 640px) {
+  .rawEvidencePanel {
+    max-height: 300px;
+    padding: 12px;
+  }
+  .rawFact {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 0;
+  }
+  .rawFactValue {
+    text-align: left;
+    white-space: normal;
+  }
+  .rawEvidenceRow {
+    flex-wrap: wrap;
+  }
+}
