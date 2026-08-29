@@ -93,6 +93,16 @@ function verdictClass(verdict: ScanReceipt["verdict"]): string {
   return verdict.toLowerCase().replaceAll(" ", "-");
 }
 
+// Generic wrapper rules that summarize rather than pinpoint real evidence.
+// For ordinary caution we show actual evidence IDs primary and hide/demote wrapper.
+// RULE_COMPOUND_COMPROMISE is never generic and must be preserved.
+const GENERIC_WRAPPER_RULES = new Set([
+  "RULE_WARNING_EVIDENCE",
+  "RULE_DANGEROUS_EVIDENCE",
+  "RULE_REQUIRED_EVIDENCE_MISSING",
+  "RULE_NO_ADVERSE_SIGNALS",
+]);
+
 export default function Home() {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
@@ -346,6 +356,11 @@ export default function Home() {
   const passCount = receipt?.evidence.filter((e) => e.status === "pass").length || 0;
   const infoCount = receipt?.evidence.filter((e) => e.status === "info").length || 0;
   const unavailableCount = receipt?.coverage.unavailable || 0;
+
+  const hasPrimaryRule = useMemo(() => {
+    if (!receipt) return false;
+    return receipt.firedRules.some((r) => !GENERIC_WRAPPER_RULES.has(r.id));
+  }, [receipt]);
 
   /**
    * Fastest measured outflow, split into value / qualifier so the number is
@@ -688,28 +703,75 @@ export default function Home() {
 
               <div className="fired">
                 <span className="lbl">Fired because:</span>
-                {receipt.firedRules.map((rule) => (
-                  <span key={rule.id} className="ruleGroup">
-                    <span className="rulechip" title={rule.explanation}>
-                      {rule.id}
-                    </span>
-                    {rule.evidenceIds.length > 0 && (
-                      <span className="ruleEvidence">
-                        <span className="ruleEvidenceLbl">from</span>
-                        {rule.evidenceIds.map((evidenceId) => (
-                          <button
-                            key={evidenceId}
-                            type="button"
-                            className="evidencechip"
-                            onClick={() => focusEvidence(evidenceId)}
-                          >
-                            {evidenceId}
-                          </button>
-                        ))}
-                      </span>
-                    )}
-                  </span>
-                ))}
+                {/* Primary evidence leads: for ordinary caution, actual evidence IDs primary, generic wrapper hidden/demoted */}
+                {(() => {
+                  const primaryEvidenceIds = new Set<string>();
+                  receipt.firedRules.forEach((r) => {
+                    if (!GENERIC_WRAPPER_RULES.has(r.id)) {
+                      r.evidenceIds.forEach((id) => primaryEvidenceIds.add(id));
+                    }
+                  });
+                  // If only generic wrappers, use their evidence as primary
+                  if (primaryEvidenceIds.size === 0) {
+                    receipt.firedRules.forEach((r) => {
+                      r.evidenceIds.forEach((id) => primaryEvidenceIds.add(id));
+                    });
+                  }
+
+                  const primaryEvidenceList = Array.from(primaryEvidenceIds);
+
+                  // Render primary evidence chips first (actual evidence IDs primary)
+                  return (
+                    <>
+                      {primaryEvidenceList.length > 0 && (
+                        <span className="ruleGroup primaryEvidenceGroup">
+                          {primaryEvidenceList.map((evidenceId) => (
+                            <button
+                              key={`primary-${evidenceId}`}
+                              type="button"
+                              className="evidencechip primaryEvidence"
+                              onClick={() => focusEvidence(evidenceId)}
+                            >
+                              {evidenceId}
+                            </button>
+                          ))}
+                        </span>
+                      )}
+
+                      {receipt.firedRules.map((rule) => {
+                        const isGeneric = GENERIC_WRAPPER_RULES.has(rule.id);
+                        // If we have primary rules, hide generic wrappers entirely
+                        if (isGeneric && hasPrimaryRule) {
+                          return null;
+                        }
+                        // If only generic wrappers, demote the chip but still show (unless already covered by primary evidence)
+                        const chipClass = isGeneric ? "rulechip rulechip-demoted" : "rulechip";
+                        return (
+                          <span key={rule.id} className="ruleGroup">
+                            <span className={chipClass} title={rule.explanation}>
+                              {rule.id}
+                            </span>
+                            {!isGeneric && rule.evidenceIds.length > 0 && (
+                              <span className="ruleEvidence">
+                                <span className="ruleEvidenceLbl">from</span>
+                                {rule.evidenceIds.map((evidenceId) => (
+                                  <button
+                                    key={evidenceId}
+                                    type="button"
+                                    className="evidencechip"
+                                    onClick={() => focusEvidence(evidenceId)}
+                                  >
+                                    {evidenceId}
+                                  </button>
+                                ))}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="verify">
@@ -975,7 +1037,7 @@ export default function Home() {
         </footer>
       </div>
 
-      {/* Floating Chat Dock Launcher */}
+      {/* Floating Chat Dock Launcher - single launcher, no duplicate */}
       <div className="dock">
         {isChatDockOpen && (
           <span className="docknote">grounded in the receipt (never guesses)</span>

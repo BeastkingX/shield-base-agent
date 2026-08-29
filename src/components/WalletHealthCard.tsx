@@ -45,38 +45,107 @@ export default function WalletHealthCard({
   const txCountItem = receipt.evidence.find((e) => e.id === "EVIDENCE_TRANSACTION_COUNT");
   const txCount = (txCountItem?.facts?.["Transaction count"] as number) || 0;
 
+  // Honesty fix: check for incomplete coverage / money trail unavailable
+  const hasUnavailable = receipt.coverage.unavailable > 0;
+  const moneyTrailEvidence = receipt.evidence.find((e) => e.id === "EVIDENCE_MONEY_TRAIL");
+  const isMoneyTrailUnavailable = moneyTrailEvidence?.status === "unavailable";
+  const clusterStatus = receipt.clusterAnalysis?.analysisStatus;
+  const isClusterIncomplete = clusterStatus !== "completed";
+  const isIncomplete = hasUnavailable || isClusterIncomplete || isMoneyTrailUnavailable;
+
   // Rule 3: 1,000-Point Score strictly derived from deterministic verdict + evidence
+  // Finding 9: when coverage.unavailable>0 or clusterAnalysis not completed, never show 950/Prime Trust/Secure Clean 2-Hop
   const isDanger = receipt.verdict === "HIGH OBSERVED RISK" || isSweeper || isTainted;
   const isCaution = receipt.verdict === "CAUTION";
   const isLowRisk = receipt.verdict === "LOW OBSERVED RISK";
 
-  const { reputationScore, reputationGrade } = (() => {
+  const { reputationScore, reputationGrade, scoreTone } = (() => {
     if (isDanger) {
       const score = isSweeper ? 0 : 120;
       return {
-        reputationScore: score,
+        reputationScore: String(score),
         reputationGrade: "Tier 5 · Critical Hazard / Blacklisted",
+        scoreTone: "danger",
+      };
+    }
+    // Incomplete checks: never claim Prime Trust / 950 / Secure Clean 2-Hop
+    if (isIncomplete) {
+      if (isMoneyTrailUnavailable) {
+        return {
+          reputationScore: "—",
+          reputationGrade: "Incomplete checks (Money trail unavailable)",
+          scoreTone: "incomplete",
+        };
+      }
+      return {
+        reputationScore: "—",
+        reputationGrade: hasUnavailable
+          ? `Incomplete checks (${receipt.coverage.unavailable} unavailable)`
+          : "Unrated · Score unavailable",
+        scoreTone: "incomplete",
       };
     }
     if (isCaution) {
       const score = warningCount >= 2 ? 450 : 600;
       const tier = warningCount >= 2 ? "Tier 4 · Caution" : "Tier 3 · Review Required";
       return {
-        reputationScore: score,
+        reputationScore: String(score),
         reputationGrade: tier,
+        scoreTone: "warn",
       };
     }
     if (isLowRisk) {
       const score = approvalsCount === 0 && txCount >= 20 ? 950 : 800;
       const tier = score >= 900 ? "Tier 1 · Prime Trust (A+)" : "Tier 2 · Verified & Active (A)";
       return {
-        reputationScore: score,
+        reputationScore: String(score),
         reputationGrade: tier,
+        scoreTone: "safe",
       };
     }
     return {
-      reputationScore: 500,
+      reputationScore: "—",
       reputationGrade: "Unrated",
+      scoreTone: "muted",
+    };
+  })();
+
+  const securityHealth = (() => {
+    if (isSweeper) {
+      return {
+        text: "Active Sweeper Bot Detected (Inflows drained in <8s)",
+        tone: "vDanger",
+      };
+    }
+    if (isTainted) {
+      return {
+        text: `Drainer Cluster Taint (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"})`,
+        tone: "vDanger",
+      };
+    }
+    if (isIncomplete) {
+      if (isMoneyTrailUnavailable) {
+        return {
+          text: "Incomplete checks (Money trail unavailable)",
+          tone: "vIncomplete",
+        };
+      }
+      return {
+        text: hasUnavailable
+          ? `Incomplete checks (${receipt.coverage.unavailable} unavailable) · Review required`
+          : "Unrated · Score unavailable · Review required",
+        tone: "vIncomplete",
+      };
+    }
+    if (isCaution) {
+      return {
+        text: "Review Required (1+ Warnings Fired)",
+        tone: "vWarn",
+      };
+    }
+    return {
+      text: "Secure (Clean 2-Hop Money Trail & Seed Funder)",
+      tone: "vSafe",
     };
   })();
 
@@ -100,13 +169,17 @@ export default function WalletHealthCard({
         {/* 1,000-Point Institutional Reputation Score Meter */}
         <div className="reputationScoreBox">
           <div className="scoreNumber">
-            <span className="scoreValue">{reputationScore}</span>
+            <span className={`scoreValue ${scoreTone === "incomplete" ? "scoreIncomplete" : scoreTone === "muted" ? "scoreUnrated" : ""}`}>{reputationScore}</span>
             <span className="scoreMax">/ 1,000</span>
           </div>
           <div className="scoreMeta">
             <strong>Reputation Score</strong>
             <span>{reputationGrade}</span>
-            <small className="scoreSubNote">Score computed from this scan's fired rules.</small>
+            <small className="scoreSubNote">
+              {isIncomplete
+                ? "Score unavailable due to incomplete checks, not rated as secure."
+                : "Score computed from this scan's fired rules."}
+            </small>
           </div>
         </div>
       </div>
@@ -117,14 +190,8 @@ export default function WalletHealthCard({
           <span className="k">
             <Icon name="shield-alert" size={14} className="kvIcon" /> Security & Compromise Health
           </span>
-          <span className={`v ${isDanger ? "vDanger" : isCaution ? "vWarn" : "vSafe"}`}>
-            {isSweeper
-              ? "Active Sweeper Bot Detected (Inflows drained in <8s)"
-              : isTainted
-              ? `Drainer Cluster Taint (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"})`
-              : isCaution
-              ? "Review Required (1+ Warnings Fired)"
-              : "Secure (Clean 2-Hop Money Trail & Seed Funder)"}
+          <span className={`v ${securityHealth.tone}`}>
+            {securityHealth.text}
           </span>
         </div>
 

@@ -25,6 +25,8 @@ export interface VerdictLog {
   entries: VerdictLogEntry[];
   sourceSlug: string;
   usedYesterdayFallback: boolean;
+  lastPublishedAt: string | null;
+  sourceFilePath: string | null;
 }
 
 /** Number of hourly entries the public log shows. */
@@ -77,9 +79,31 @@ export function readDay(
   }
 }
 
+function readDayMeta(
+  slug: string,
+  directory: string,
+): { entries: VerdictLogEntry[]; mtime: string | null; filePath: string } | null {
+  try {
+    const file = path.join(directory, `${slug}.json`);
+    if (!fs.existsSync(file)) return null;
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!Array.isArray(parsed)) return null;
+    const stat = fs.statSync(file);
+    const mtime = stat.mtime.toISOString();
+    return {
+      entries: parsed.filter(isEntry),
+      mtime,
+      filePath: file,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Returns the latest entries, newest first, capped at `limit`. Falls back to
  * yesterday's file when today's is missing or empty.
+ * Also returns lastPublishedAt from file mtime for truthful freshness display.
  */
 export function loadVerdictLog(
   options: {
@@ -99,10 +123,21 @@ export function loadVerdictLog(
 
   const todayEntries = readDay(todaySlug, directory);
   const usedYesterdayFallback = todayEntries === null || todayEntries.length === 0;
-  const entries =
-    !usedYesterdayFallback && todayEntries
-      ? todayEntries
-      : (readDay(yesterdaySlug, directory) ?? []);
+
+  let meta: { entries: VerdictLogEntry[]; mtime: string | null; filePath: string } | null = null;
+  let sourceSlug: string;
+  let entries: VerdictLogEntry[];
+
+  if (!usedYesterdayFallback && todayEntries) {
+    entries = todayEntries;
+    sourceSlug = todaySlug;
+    meta = readDayMeta(todaySlug, directory);
+  } else {
+    const yesterdayEntries = readDay(yesterdaySlug, directory);
+    entries = yesterdayEntries ?? [];
+    sourceSlug = yesterdaySlug;
+    meta = readDayMeta(yesterdaySlug, directory);
+  }
 
   const sorted = entries
     .slice()
@@ -110,8 +145,10 @@ export function loadVerdictLog(
 
   return {
     entries: sorted.slice(0, limit),
-    sourceSlug: usedYesterdayFallback ? yesterdaySlug : todaySlug,
+    sourceSlug,
     usedYesterdayFallback,
+    lastPublishedAt: meta?.mtime ?? (sorted[0]?.scannedAt ?? null),
+    sourceFilePath: meta?.filePath ?? null,
   };
 }
 
