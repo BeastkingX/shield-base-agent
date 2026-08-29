@@ -4,6 +4,13 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Signature inspection resolves spender contracts and approval exposure through
+ * providers that now retry on transient failures; 30s keeps that inside the
+ * platform limit.
+ */
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
   const ip = clientIp(request);
   if (!rateLimit(`inspect:${ip}`, 10, 60_000)) {

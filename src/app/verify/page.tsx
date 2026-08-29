@@ -40,10 +40,14 @@ const SAMPLE_EOA_RECEIPT = {
 
 const SAMPLE_INSPECT_RECEIPT = {
   receiptId: "inspect_22d473030f116d",
-  receiptHash: "0x7853d72efcab1c275fef865e5b1f576bea0fffa0f15987cf73ed0bac169eacb0",
+  // Recomputed over the canonical payload after the verdict wording change;
+  // the digest must match the content or the demo would verify as tampered.
+  receiptHash:
+    "0xd3e4ac1f7c8fb932f37df419e1b725336332c383bebf3d4d8f170af568d5cd1c",
   title: "Permit2 Single Signature Inspection",
-  verdict: "SAFE TO SIGN",
-  summary: "Standard Uniswap Permit2 signature on Base Mainnet. Domain verifying contract matches official canonical deployment.",
+  verdict: "NO RED FLAGS FOUND",
+  summary:
+    "Demo payload: a standard Uniswap Permit2 signature on Base Mainnet. Domain verifying contract matches the official canonical deployment. No red flags found in the checks that ran; this is not a guarantee of safety.",
   details: "Single token approval for USDC router execution.",
   signatureType: "Permit2 Single",
   parsedData: {
@@ -85,6 +89,13 @@ function VerifyContent() {
   const [verifying, setVerifying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  /**
+   * Digest carried in from the live verdict log, so a published hash can be
+   * compared against a receipt the visitor holds. Shield never claims a match
+   * until the browser recomputes it.
+   */
+  const publishedHash = searchParams.get("hash")?.trim() || "";
 
   useEffect(() => {
     const isDark = document.documentElement.getAttribute("data-theme") !== "light";
@@ -167,17 +178,27 @@ function VerifyContent() {
             </span>
             <h1>Independent Receipt Verification</h1>
             <p className="verifySubtitle">
-              Shield receipts are cryptographically signed with a SHA-256 content digest.
+              Every Shield receipt carries a SHA-256 content digest; recompute it in
+              your browser and compare. A digest proves the content is unchanged, it
+              is not a cryptographic signature.
               Paste any receipt JSON below to re-hash and prove zero data tampering in your browser.
             </p>
           </header>
+
+          {publishedHash && (
+            <p className="verdictLogMeta" role="status">
+              Comparing against the digest published in the live verdict log:{" "}
+              <span className="mono">{publishedHash}</span> — paste that receipt JSON
+              below; the digest your browser recomputes must match it exactly.
+            </p>
+          )}
 
           <section className="verifyConsoleSection">
             <div className="verifyInputCard">
               <div className="verifyCardTop">
                 <label htmlFor="receiptJson">Paste Shield Receipt JSON</label>
                 <div className="sampleButtonsGroup">
-                  <span>Load Sample:</span>
+                  <span>Load demo receipt:</span>
                   <button
                     type="button"
                     className="samplePill"
@@ -187,7 +208,7 @@ function VerifyContent() {
                       void runVerification(text);
                     }}
                   >
-                    <Icon name="check" size={11} /> Authentic EOA
+                    <Icon name="check" size={11} /> EOA scan (demo)
                   </button>
                   <button
                     type="button"
@@ -198,7 +219,7 @@ function VerifyContent() {
                       void runVerification(text);
                     }}
                   >
-                    <Icon name="key" size={11} /> Permit2 Inspection
+                    <Icon name="key" size={11} /> Permit2 inspection (demo)
                   </button>
                   <button
                     type="button"
@@ -209,10 +230,16 @@ function VerifyContent() {
                       void runVerification(text);
                     }}
                   >
-                    <Icon name="danger" size={11} /> Tampered Test
+                    <Icon name="danger" size={11} /> Tampered receipt (demo)
                   </button>
                 </div>
               </div>
+
+              <p className="verdictLogMeta">
+                Demo receipt — not a live verdict. These fixed samples exist only to
+                show how hash verification behaves; they are not scans of any live
+                address. Paste a receipt from a real scan to verify actual results.
+              </p>
 
               <textarea
                 id="receiptJson"
@@ -268,7 +295,7 @@ function VerifyContent() {
                   <div className="resultHeadText">
                     <h3>
                       {result.valid
-                        ? "CRYPTOGRAPHICALLY AUTHENTIC & UNTAMPERED"
+                        ? "SHA-256 DIGEST MATCHED · CONTENT UNALTERED"
                         : "HASH MISMATCH: TAMPERED RECEIPT DETECTED"}
                     </h3>
                     <p>

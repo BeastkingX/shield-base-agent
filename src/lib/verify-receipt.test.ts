@@ -79,7 +79,7 @@ describe("verifyReceipt (cryptographic receipt verification engine)", () => {
   it("verifies a Pop-Up / Signature inspection receipt", () => {
     const inspectPayload = {
       title: "Clean Permit2 Signature Inspection",
-      verdict: "SAFE TO SIGN",
+      verdict: "NO RED FLAGS FOUND",
       summary: "Verified Uniswap Permit2 transaction on Base.",
       details: "No lookalike contract spoofing.",
       signatureType: "Permit2 Single",
@@ -99,6 +99,6 @@ describe("verifyReceipt (cryptographic receipt verification engine)", () => {
     const result = verifyReceipt(fullInspection);
     expect(result.valid).toBe(true);
     expect(result.type).toBe("inspect");
-    expect(result.verdict).toBe("SAFE TO SIGN");
+    expect(result.verdict).toBe("NO RED FLAGS FOUND");
   });
 });

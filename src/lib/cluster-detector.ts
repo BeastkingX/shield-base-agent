@@ -1,4 +1,5 @@
 import type { Address } from "viem";
+import { fetchWithRetry, RETRY_ATTEMPTS } from "./retry";
 
 /**
  * Shield Cluster Detector v2, High-Performance Real Measurement Engine.
@@ -45,6 +46,11 @@ const RAPID_FORWARD_SECONDS = 120;
 const MIN_VELOCITY_SAMPLES = 2;
 const TARGET_WINDOW = 50;
 const HOP_WINDOW = 25;
+/**
+ * Shared retry budget for one history window. analyzeClusterTaint reads up to
+ * four windows, so this stays well inside the scan route's `maxDuration`.
+ */
+const HISTORY_BUDGET_MS = 10_000;
 
 interface IndexedTx {
   hash: string;
@@ -58,94 +64,136 @@ interface IndexedTx {
   functionName: string;
 }
 
+/** Performs one compatibility-API txlist request against `baseUrl`. */
+async function requestCompatTxList(
+  baseUrl: string,
+  address: string,
+  sort: "asc" | "desc",
+  offset: number,
+  options: { withKey: boolean; attempts: number; deadlineAt: number },
+): Promise<IndexedTx[]> {
+  const url = new URL(baseUrl);
+  if (options.withKey) {
+    url.searchParams.set("chain_id", BASE_CHAIN_ID);
+    url.searchParams.set("apikey", process.env.BLOCKSCOUT_API_KEY?.trim() ?? "");
+  }
+  url.searchParams.set("module", "account");
+  url.searchParams.set("action", "txlist");
+  url.searchParams.set("address", address);
+  url.searchParams.set("startblock", "0");
+  url.searchParams.set("endblock", "9999999999");
+  url.searchParams.set("page", "1");
+  url.searchParams.set("offset", String(offset));
+  url.searchParams.set("sort", sort);
+
+  const response = await fetchWithRetry(
+    url,
+    { cache: "no-store" },
+    {
+      timeoutMs: 3500,
+      attempts: options.attempts,
+      deadlineAt: options.deadlineAt,
+      label: `Blockscout txlist (${options.withKey ? "keyed" : "keyless"})`,
+    },
+  );
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const body = (await response.json()) as {
+    status?: string;
+    message?: string;
+    result?: unknown;
+  };
+
+  if (body.status === "1" && Array.isArray(body.result)) {
+    return body.result as IndexedTx[];
+  }
+  if (/no transactions found/i.test(body.message ?? "")) return [];
+  if (typeof body.result === "string" && /too many requests/i.test(body.result)) {
+    throw new Error("rate limited by compatibility route");
+  }
+  throw new Error(`compatibility route rejected the request (${body.message ?? "unknown"})`);
+}
+
 async function fetchTxList(
   address: string,
   options: { sort?: "asc" | "desc"; offset?: number } = {},
 ): Promise<IndexedTx[]> {
   const { sort = "asc", offset = TARGET_WINDOW } = options;
   const apiKey = process.env.BLOCKSCOUT_API_KEY?.trim();
-  const baseUrl = apiKey ? PRO_COMPAT_URL : PUBLIC_COMPAT_URL;
-  let lastError: Error | null = null;
+  // One shared budget so retries cannot outlast the calling API route.
+  const deadlineAt = Date.now() + HISTORY_BUDGET_MS;
+  const errors: string[] = [];
 
-  // 1. Try standard compatibility txlist API
+  // 1. Keyed compatibility API (full retry policy), or the public one when no
+  //    server key is configured.
   try {
-    const url = new URL(baseUrl);
-    if (apiKey) {
-      url.searchParams.set("chain_id", BASE_CHAIN_ID);
-      url.searchParams.set("apikey", apiKey);
-    }
-    url.searchParams.set("module", "account");
-    url.searchParams.set("action", "txlist");
-    url.searchParams.set("address", address);
-    url.searchParams.set("startblock", "0");
-    url.searchParams.set("endblock", "9999999999");
-    url.searchParams.set("page", "1");
-    url.searchParams.set("offset", String(offset));
-    url.searchParams.set("sort", sort);
-
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(3500),
-    });
-
-    if (response.ok) {
-      const body = (await response.json()) as {
-        status?: string;
-        message?: string;
-        result?: unknown;
-      };
-      if (body.status === "1" && Array.isArray(body.result)) {
-        return body.result as IndexedTx[];
-      }
-      if (/no transactions found/i.test(body.message ?? "")) return [];
-      if (typeof body.result === "string" && /too many requests/i.test(body.result)) {
-        // Rate limited on compat route; proceed to REST fallback
-      }
-    } else {
-      lastError = new Error(`HTTP ${response.status}`);
-    }
-  } catch (err: any) {
-    lastError = err instanceof Error ? err : new Error("txlist failed");
+    return await requestCompatTxList(
+      apiKey ? PRO_COMPAT_URL : PUBLIC_COMPAT_URL,
+      address,
+      sort,
+      offset,
+      { withKey: Boolean(apiKey), attempts: RETRY_ATTEMPTS, deadlineAt },
+    );
+  } catch (err: unknown) {
+    errors.push(err instanceof Error ? err.message : "keyed txlist failed");
   }
 
-  // 2. Fallback to open Blockscout REST API v2
+  // 2. Keyless compatibility endpoint, tried exactly once, only when a key was
+  //    in play. A rate-limited paid key must not cost the scan its history.
+  if (apiKey) {
+    try {
+      return await requestCompatTxList(PUBLIC_COMPAT_URL, address, sort, offset, {
+        withKey: false,
+        attempts: 1,
+        deadlineAt,
+      });
+    } catch (err: unknown) {
+      errors.push(err instanceof Error ? err.message : "keyless txlist failed");
+    }
+  }
+
+  // 3. Open Blockscout REST API v2.
   try {
     const restUrl = `https://base.blockscout.com/api/v2/addresses/${address}/transactions`;
-    const response = await fetch(restUrl, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(3500),
-    });
-    if (response.ok) {
-      const body = await response.json();
-      if (Array.isArray(body.items)) {
-        const mapped: IndexedTx[] = body.items.map((it: any) => ({
-          hash: it.hash || "",
-          from: it.from?.hash || "",
-          to: it.to?.hash || "",
-          value: it.value || "0",
-          timeStamp: it.timestamp ? String(Math.floor(Date.parse(it.timestamp) / 1000)) : "",
-          isError: it.status === "error" ? "1" : "0",
-          txreceipt_status: it.status === "ok" || it.status === "success" ? "1" : "0",
-          methodId: it.method?.startsWith("0x") ? it.method : "",
-          functionName: it.method || "",
-        }));
-        if (sort === "asc") {
-          mapped.sort((a, b) => Number(a.timeStamp) - Number(b.timeStamp));
-        } else {
-          mapped.sort((a, b) => Number(b.timeStamp) - Number(a.timeStamp));
-        }
-        return mapped.slice(0, offset);
+    const response = await fetchWithRetry(
+      restUrl,
+      { cache: "no-store" },
+      {
+        timeoutMs: 3500,
+        attempts: RETRY_ATTEMPTS,
+        deadlineAt,
+        label: "Blockscout REST v2",
+      },
+    );
+    if (!response.ok) throw new Error(`REST API HTTP ${response.status}`);
+
+    const body = await response.json();
+    if (Array.isArray(body.items)) {
+      const mapped: IndexedTx[] = body.items.map((it: any) => ({
+        hash: it.hash || "",
+        from: it.from?.hash || "",
+        to: it.to?.hash || "",
+        value: it.value || "0",
+        timeStamp: it.timestamp ? String(Math.floor(Date.parse(it.timestamp) / 1000)) : "",
+        isError: it.status === "error" ? "1" : "0",
+        txreceipt_status: it.status === "ok" || it.status === "success" ? "1" : "0",
+        methodId: it.method?.startsWith("0x") ? it.method : "",
+        functionName: it.method || "",
+      }));
+      if (sort === "asc") {
+        mapped.sort((a, b) => Number(a.timeStamp) - Number(b.timeStamp));
+      } else {
+        mapped.sort((a, b) => Number(b.timeStamp) - Number(a.timeStamp));
       }
-    } else {
-      throw new Error(`REST API HTTP ${response.status}`);
+      return mapped.slice(0, offset);
     }
-  } catch (err: any) {
-    if (lastError) throw lastError;
-    throw err instanceof Error ? err : new Error("REST API failed");
+    errors.push("REST API returned an unexpected shape");
+  } catch (err: unknown) {
+    errors.push(err instanceof Error ? err.message : "REST API failed");
   }
 
-  if (lastError) throw lastError;
-  return [];
+  throw new Error(`indexed history unavailable (${errors.join(" | ")})`);
 }
 
 const isSuccessful = (tx: IndexedTx): boolean =>
@@ -392,6 +440,13 @@ export async function analyzeClusterTaint(
 
   if (severity === "none") {
     notes.push("No rapid-forwarding or cluster pattern measured in the sampled history.");
+  }
+
+  // A "partial" status is only honest if the receipt says what is missing.
+  if (gaps.length > 0) {
+    notes.push(
+      `Incomplete history: ${gaps.join("; ")}. Conclusions below rest only on the windows Shield could read.`,
+    );
   }
 
   return {

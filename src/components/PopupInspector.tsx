@@ -118,7 +118,7 @@ export default function PopupInspector() {
           </div>
           <h2>Check a Pop-Up or Signature</h2>
           <p className="inspectorSubtitle">
-            Is this wallet pop-up safe to sign? Paste any EIP-712 typed data, permit signature, or contract call to audit permissions before you sign.
+            Should you sign this wallet pop-up? Paste any EIP-712 typed data, permit signature, or contract call to audit permissions before you sign.
           </p>
         </div>
         <span className="noLeakTag" role="note">

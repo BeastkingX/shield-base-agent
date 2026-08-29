@@ -5,10 +5,25 @@ import {
   type ContractCreation,
   type IndexedTransaction,
 } from "./etherscan-client";
+import { fetchWithRetry } from "./retry";
 
 const BLOCKSCOUT_PRO_URL = "https://api.blockscout.com/v2/api";
 const BLOCKSCOUT_REST_URL = "https://api.blockscout.com/8453/api/v2";
+/**
+ * Public, keyless Blockscout compatibility endpoint. Used exactly once as a
+ * fallback after the keyed compatibility route has failed, because a rate
+ * limited or erroring paid key should not cost the scan its activity evidence.
+ */
+const BLOCKSCOUT_KEYLESS_URL = "https://base.blockscout.com/api";
 const BASE_CHAIN_ID = "8453";
+
+/** Per-attempt network timeout for history routes. */
+const ATTEMPT_TIMEOUT_MS = 5_000;
+/**
+ * Shared wall-clock budget for every Blockscout route inside one call, so the
+ * retry policy can never outlast the API route's `maxDuration`.
+ */
+const ROUTE_BUDGET_MS = 20_000;
 
 const envelopeSchema = z.object({
   status: z.string(),
@@ -75,17 +90,29 @@ function apiKey(): string {
   return key;
 }
 
-async function fetchJson(url: URL, routeName: string): Promise<unknown> {
+async function fetchJson(
+  url: URL,
+  routeName: string,
+  options: { deadlineAt?: number; attempts?: number } = {},
+): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
+    response = await fetchWithRetry(
+      url,
+      { cache: "no-store" },
+      {
+        timeoutMs: ATTEMPT_TIMEOUT_MS,
+        deadlineAt: options.deadlineAt,
+        attempts: options.attempts,
+        label: routeName,
+      },
+    );
+  } catch (error) {
     throw new ExplorerUnavailableError(
       "request-failed",
-      `${routeName} timed out or could not connect.`,
+      `${routeName} timed out or could not connect. ${
+        error instanceof Error ? error.message : "request failed"
+      }`,
     );
   }
 
@@ -108,16 +135,32 @@ async function fetchJson(url: URL, routeName: string): Promise<unknown> {
 
 async function callBlockscout(
   parameters: Record<string, string>,
-  options: { allowEmptyResult?: boolean } = {},
+  options: {
+    allowEmptyResult?: boolean;
+    keyless?: boolean;
+    deadlineAt?: number;
+    attempts?: number;
+  } = {},
 ): Promise<unknown> {
-  const url = new URL(BLOCKSCOUT_PRO_URL);
-  url.searchParams.set("chain_id", BASE_CHAIN_ID);
-  url.searchParams.set("apikey", apiKey());
+  const keyless = options.keyless === true;
+  const url = new URL(keyless ? BLOCKSCOUT_KEYLESS_URL : BLOCKSCOUT_PRO_URL);
+
+  if (!keyless) {
+    url.searchParams.set("chain_id", BASE_CHAIN_ID);
+    url.searchParams.set("apikey", apiKey());
+  }
+
   Object.entries(parameters).forEach(([key, value]) =>
     url.searchParams.set(key, value),
   );
 
-  const body = await fetchJson(url, "Blockscout compatibility API");
+  const body = await fetchJson(
+    url,
+    keyless
+      ? "Blockscout keyless compatibility API"
+      : "Blockscout compatibility API",
+    { deadlineAt: options.deadlineAt, attempts: options.attempts },
+  );
   const parsed = envelopeSchema.safeParse(body);
   if (!parsed.success) {
     throw new ExplorerUnavailableError(
@@ -155,13 +198,15 @@ function unixSeconds(timestamp: string): string {
 async function getBlockscoutRestTransactions(
   address: Address,
   limit: number,
+  deadlineAt?: number,
 ): Promise<IndexedTransaction[]> {
   const url = new URL(
     `${BLOCKSCOUT_REST_URL}/addresses/${address}/transactions`,
   );
-  url.searchParams.set("apikey", apiKey());
+  const key = process.env.BLOCKSCOUT_API_KEY?.trim();
+  if (key) url.searchParams.set("apikey", key);
 
-  const body = await fetchJson(url, "Blockscout REST API");
+  const body = await fetchJson(url, "Blockscout REST API", { deadlineAt });
   const parsed = restTransactionsSchema.safeParse(body);
   if (!parsed.success) {
     throw new ExplorerUnavailableError(
@@ -215,21 +260,22 @@ export async function getBlockscoutRecentTransactions(
 ): Promise<BlockscoutTransactionHistory> {
   apiKey();
   const failures: string[] = [];
+  // One shared budget across all three routes keeps the retry policy inside
+  // the API route's maxDuration.
+  const deadlineAt = Date.now() + ROUTE_BUDGET_MS;
 
-  try {
-    const result = await callBlockscout(
-      {
-        module: "account",
-        action: "txlist",
-        address,
-        startblock: "0",
-        endblock: "9999999999",
-        page: "1",
-        offset: String(limit),
-        sort: "desc",
-      },
-      { allowEmptyResult: true },
-    );
+  const txlistParameters = {
+    module: "account",
+    action: "txlist",
+    address,
+    startblock: "0",
+    endblock: "9999999999",
+    page: "1",
+    offset: String(limit),
+    sort: "desc",
+  };
+
+  const parseTxList = (result: unknown): IndexedTransaction[] => {
     const parsed = z.array(transactionSchema).safeParse(result);
     if (!parsed.success) {
       throw new ExplorerUnavailableError(
@@ -237,8 +283,18 @@ export async function getBlockscoutRecentTransactions(
         "Compatibility transaction history had an unexpected format.",
       );
     }
+    return parsed.data;
+  };
+
+  // Route 1: keyed compatibility API, with the full retry policy.
+  try {
     return {
-      transactions: parsed.data,
+      transactions: parseTxList(
+        await callBlockscout(txlistParameters, {
+          allowEmptyResult: true,
+          deadlineAt,
+        }),
+      ),
       method: "account.txlist",
     };
   } catch (error) {
@@ -247,9 +303,34 @@ export async function getBlockscoutRecentTransactions(
     );
   }
 
+  // Route 2: keyless public compatibility endpoint, tried exactly once. A
+  // rate-limited or failing paid key must not cost the scan its activity data.
   try {
     return {
-      transactions: await getBlockscoutRestTransactions(address, limit),
+      transactions: parseTxList(
+        await callBlockscout(txlistParameters, {
+          allowEmptyResult: true,
+          keyless: true,
+          attempts: 1,
+          deadlineAt,
+        }),
+      ),
+      method: "account.txlist",
+    };
+  } catch (error) {
+    failures.push(
+      `keyless-compatibility: ${error instanceof Error ? error.message : "request failed"}`,
+    );
+  }
+
+  // Route 3: modern REST API.
+  try {
+    return {
+      transactions: await getBlockscoutRestTransactions(
+        address,
+        limit,
+        deadlineAt,
+      ),
       method: "REST /addresses/{address}/transactions",
     };
   } catch (error) {
@@ -260,6 +341,6 @@ export async function getBlockscoutRecentTransactions(
 
   throw new ExplorerUnavailableError(
     "api-error",
-    `Both Blockscout transaction routes failed. ${failures.join(" | ")}`,
+    `All three Blockscout transaction routes failed. ${failures.join(" | ")}`,
   );
 }

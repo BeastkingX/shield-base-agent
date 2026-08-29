@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Icon, { type IconName } from "./Icon";
 
 interface AiEducationCarouselProps {
@@ -54,6 +54,13 @@ const SECURITY_QUESTIONS: SecurityQuestion[] = [
 ];
 
 export default function AiEducationCarousel({ onSelectQuestion }: AiEducationCarouselProps) {
+  /**
+   * Sticky pause: the first pointerdown stops the marquee for good, so a card
+   * can be tapped or its text selected without sliding out from under the
+   * cursor. Hover and keyboard focus pause it too (see globals.css).
+   */
+  const [paused, setPaused] = useState(false);
+
   return (
     <section className="educationCarouselSection" aria-label="Interactive Security Questions">
       <div className="carouselHeaderRow">
@@ -64,7 +71,13 @@ export default function AiEducationCarousel({ onSelectQuestion }: AiEducationCar
         </div>
       </div>
 
-      <div className="carouselTrackWrapper" tabIndex={0} aria-label="Scrollable list of security questions">
+      <div
+        className="carouselTrackWrapper"
+        tabIndex={0}
+        aria-label="Scrollable list of security questions"
+        data-paused={paused ? "true" : "false"}
+        onPointerDown={() => setPaused(true)}
+      >
         <div className="carouselTrack">
           {/* Primary Interactive Track */}
           {SECURITY_QUESTIONS.map((item, index) => (
