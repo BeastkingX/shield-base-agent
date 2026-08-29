@@ -228,6 +228,17 @@ async function getThreatFlags(
   return null;
 }
 
+// Helper to race a promise against a timeout, returning a settled-like result
+// so slow collectors become explicit unavailable evidence instead of a full 504.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 export async function runShieldScan(address: Address): Promise<ScanReceipt> {
   const scannedAt = new Date().toISOString();
   let approvalsSummary: ApprovalsSummary | undefined;
@@ -415,7 +426,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     }),
   );
 
-  // CONTRACT PATH
+  // CONTRACT PATH – honest partial-mode rescue with parallel collectors
   if (targetType === "contract") {
     const implementationAddress = storageValueToAddress(eip1967Storage ?? undefined);
     items.push(
@@ -443,11 +454,27 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       }),
     );
 
-    const sourceResult = await Promise.allSettled([
+    const sourceMetaPromise = withTimeout(
       getContractSourceMetadata(address),
-    ]);
-    const sourceRes = sourceResult[0];
+      6000,
+      "source metadata",
+    );
+    const creationPromise = protocolPredeploy
+      ? Promise.resolve(null)
+      : withTimeout(getIndexedContractCreation(address), 7000, "contract creation");
+    const historyPromise = withTimeout(
+      getIndexedRecentTransactions(address),
+      7000,
+      "recent activity",
+    );
 
+    const [sourceResult, creationResult, historyResult] = await Promise.allSettled([
+      sourceMetaPromise,
+      creationPromise,
+      historyPromise,
+    ]);
+
+    const sourceRes = sourceResult as PromiseSettledResult<any>;
     if (sourceRes.status === "fulfilled") {
       const source = sourceRes.value;
       const isVerified = source.verified;
@@ -537,12 +564,8 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         }),
       );
     } else {
-      const creationResult = await Promise.allSettled([
-        getIndexedContractCreation(address),
-      ]);
-      const creationRes = creationResult[0];
-
-      if (creationRes.status === "fulfilled") {
+      const creationRes = creationResult as PromiseSettledResult<any>;
+      if (creationRes.status === "fulfilled" && creationRes.value) {
         const { data: creation, provider } = creationRes.value;
         items.push(
           evidence(context, {
@@ -563,6 +586,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
           }),
         );
       } else {
+        const reason = creationRes.status === "rejected" ? creationRes.reason : new Error("creation unavailable");
         items.push(
           unavailableEvidence(
             context,
@@ -572,17 +596,13 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
             "Shield could not retrieve the contract's creation transaction.",
             "indexed-provider-fallback",
             "contract.getcontractcreation",
-            explorerFailureLimitations(creationRes.reason),
+            explorerFailureLimitations(reason),
           ),
         );
       }
     }
 
-    const historyResult = await Promise.allSettled([
-      getIndexedRecentTransactions(address),
-    ]);
-    const historyRes = historyResult[0];
-
+    const historyRes = historyResult as PromiseSettledResult<any>;
     if (historyRes.status === "fulfilled") {
       const { data: transactions, provider, method } = historyRes.value;
       const summary = summarizeTransactions(transactions, address);
@@ -630,12 +650,31 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       );
     }
   } else {
-    // WALLET PATH
-    const historyResult = await Promise.allSettled([
+    // WALLET PATH – honest partial-mode rescue: run history, approvals, threat intel in parallel
+    const historyPromise = withTimeout(
       getIndexedRecentTransactions(address),
-    ]);
-    const walletHistoryRes = historyResult[0];
+      7000,
+      "recent activity",
+    );
+    const approvalsPromise = withTimeout(
+      fetchApprovalsForWallet(address),
+      5000,
+      "approvals",
+    );
+    const threatPromise = withTimeout(
+      getThreatReport(address),
+      6000,
+      "threat intel",
+    );
 
+    const [historySettled, approvalsSettled, threatSettled] = await Promise.allSettled([
+      historyPromise,
+      approvalsPromise,
+      threatPromise,
+    ]);
+
+    // Process history – preserve recent-window when earliest fails
+    const walletHistoryRes = historySettled as PromiseSettledResult<any>;
     if (walletHistoryRes.status === "fulfilled") {
       const { data: transactions, provider, method } = walletHistoryRes.value;
       const summary = summarizeTransactions(transactions, address);
@@ -705,12 +744,37 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       );
     }
 
-    // Token Approvals Check
-    approvalsSummary = await fetchApprovalsForWallet(address);
+    // Process approvals – honest partial, never invent clean if timed out
+    if (approvalsSettled.status === "fulfilled") {
+      approvalsSummary = approvalsSettled.value as ApprovalsSummary;
+    } else {
+      approvalsSummary = {
+        approvals: [],
+        totalCount: 0,
+        unlimitedCount: 0,
+        highRiskCount: 0,
+        uniqueTokensCount: 0,
+        uniqueSpendersCount: 0,
+      };
+    }
+
     const hasApprovals = approvalsSummary && approvalsSummary.totalCount > 0;
     const hasHighRiskSpender = approvalsSummary && approvalsSummary.highRiskCount > 0;
 
-    if (hasApprovals) {
+    if (approvalsSettled.status === "rejected") {
+      items.push(
+        unavailableEvidence(
+          context,
+          "exposure",
+          "EVIDENCE_ACTIVE_APPROVALS",
+          "Active approvals check timed out",
+          "Shield could not complete the token approval audit within the time budget; this check is an explicit gap, not a pass.",
+          "blockscout-approval-index + base-rpc",
+          "Approval events + allowance probe",
+          ["Approval scan timed out; absence was not treated as safe."],
+        ),
+      );
+    } else if (hasApprovals) {
       items.push(
         evidence(context, {
           id: "EVIDENCE_ACTIVE_APPROVALS",
@@ -757,22 +821,18 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       );
     }
 
-    // EIP-7702 Delegate Bounded 1-Hop Evaluation
+    // EIP-7702 Delegate Bounded 1-Hop Evaluation – with timeouts
     if (delegationAddress) {
       try {
         const [delegateCode, delegateSourceRes, delegateCreationRes, delegateThreat] =
           await Promise.allSettled([
-            baseClient.getCode({ address: delegationAddress, blockNumber }),
-            getContractSourceMetadata(delegationAddress),
-            getIndexedContractCreation(delegationAddress),
-            getThreatFlags(delegationAddress),
+            withTimeout(baseClient.getCode({ address: delegationAddress, blockNumber }), 5000, "delegate code"),
+            withTimeout(getContractSourceMetadata(delegationAddress), 5000, "delegate source"),
+            withTimeout(getIndexedContractCreation(delegationAddress), 5000, "delegate creation"),
+            withTimeout(getThreatFlags(delegationAddress), 5000, "delegate threat"),
           ]);
 
         const knownDelegate = getKnown7702Delegate(delegationAddress);
-        const hasCode =
-          delegateCode.status === "fulfilled" &&
-          delegateCode.value &&
-          delegateCode.value !== "0x";
         const isVerifiedSource =
           delegateSourceRes.status === "fulfilled" &&
           delegateSourceRes.value &&
@@ -789,10 +849,14 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         let creatorActivity = "Unknown";
         if (creator && isAddress(creator)) {
           try {
-            const cNonce = await baseClient.getTransactionCount({
-              address: creator as Address,
-              blockNumber,
-            });
+            const cNonce = await withTimeout(
+              baseClient.getTransactionCount({
+                address: creator as Address,
+                blockNumber,
+              }),
+              4000,
+              "creator nonce",
+            );
             creatorActivity = `${cNonce} sent transactions`;
           } catch {}
         }
@@ -862,9 +926,12 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         );
       }
     }
+
+    // Store threat result for later processing after money trail
+    (globalThis as any).__shield_threatSettled = threatSettled;
   }
 
-  // Money Trail & Sweep Velocity, measured on every scan
+  // Money Trail & Sweep Velocity, measured on every scan – already has partial rescue for earliest window
   if (clusterAnalysis.analysisStatus === "unavailable") {
     items.push(
       evidence(context, {
@@ -978,65 +1045,91 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
     );
   }
 
-  // Third-party threat intelligence (GoPlus Base + GoPlus Ethereum + ScamSniffer DB)
+  // Third-party threat intelligence – wallet path uses parallel result, contract path fetches fresh
   if (targetType === "wallet") {
-    try {
-      const threatReport = await getThreatReport(address);
-      if (threatReport.overallStatus === "unavailable") {
-        throw new Error("All threat intelligence providers were unavailable");
+    const threatSettled = (globalThis as any).__shield_threatSettled as PromiseSettledResult<any> | undefined;
+    delete (globalThis as any).__shield_threatSettled;
+
+    if (threatSettled) {
+      if (threatSettled.status === "fulfilled") {
+        try {
+          const threatReport = threatSettled.value as UnifiedThreatReport;
+          if (threatReport.overallStatus === "unavailable") {
+            throw new Error("All threat intelligence providers were unavailable");
+          }
+          const dangerList = threatReport.dangerFlags;
+          const cautionList = threatReport.cautionFlags;
+          items.push(
+            evidence(context, {
+              id: "EVIDENCE_THREAT_INTEL",
+              category: "history",
+              label: dangerList.length
+                ? `Threat-intel match: ${dangerList.join(", ")}`
+                : cautionList.length
+                  ? `Threat-intel caution flags: ${cautionList.join(", ")}`
+                  : "No third-party threat-intel flags",
+              status: threatReport.overallStatus,
+              claim: dangerList.length
+                ? `Threat intelligence flagged this address across ${dangerList.length} source/category: ${dangerList.join(", ")}.`
+                : cautionList.length
+                  ? `Threat intelligence flags caution categories: ${cautionList.join(", ")}.`
+                  : "No threats listed across 3 independent threat intelligence sources (GoPlus Base, GoPlus Ethereum, ScamSniffer DB).",
+              source: "threat-intel-union",
+              method: "GoPlus (Base + Ethereum) + ScamSniffer DB",
+              rawValue: dangerList.length + cautionList.length,
+              facts: {
+                "GoPlus (Base)": threatReport.goplusBase.detail,
+                "GoPlus (Ethereum)": threatReport.goplusEth.detail,
+                "ScamSniffer DB":
+                  threatReport.scamsniffer === "listed"
+                    ? "Blacklisted Phishing/Drainer"
+                    : threatReport.scamsniffer === "not-listed"
+                      ? "Not listed"
+                      : "Unavailable",
+                "Sources checked": `${threatReport.sourcesChecked}/3 providers`,
+              },
+              referenceUrl: "https://gopluslabs.io/",
+              limitations: [
+                "Third-party threat lists can lag fresh attackers and may contain stale or disputed entries; a flag is a strong signal, not proof, and a clean result is not a guarantee.",
+              ],
+            }),
+          );
+        } catch {
+          items.push(
+            unavailableEvidence(
+              context,
+              "history",
+              "EVIDENCE_THREAT_INTEL",
+              "Threat-intel check unavailable",
+              "The third-party threat-intel provider could not be queried at scan time; this check is an explicit gap, not a pass.",
+              "threat-intel-union",
+              "GoPlus (Base + Ethereum) + ScamSniffer DB",
+              ["No threat-intel data was available; absence of evidence was not treated as evidence."],
+            ),
+          );
+        }
+      } else {
+        items.push(
+          unavailableEvidence(
+            context,
+            "history",
+            "EVIDENCE_THREAT_INTEL",
+            threatSettled.reason?.message?.includes("timed out")
+              ? "Threat-intel check timed out"
+              : "Threat-intel check unavailable",
+            threatSettled.reason?.message?.includes("timed out")
+              ? "Threat-intel providers did not respond within the time budget; this check is an explicit gap, not a pass."
+              : "The third-party threat-intel provider could not be queried at scan time; this check is an explicit gap, not a pass.",
+            "threat-intel-union",
+            "GoPlus (Base + Ethereum) + ScamSniffer DB",
+            [
+              threatSettled.reason?.message?.includes("timed out")
+                ? `Provider timeout: ${threatSettled.reason.message}`
+                : "No threat-intel data was available; absence of evidence was not treated as evidence.",
+            ],
+          ),
+        );
       }
-
-      const dangerList = threatReport.dangerFlags;
-      const cautionList = threatReport.cautionFlags;
-
-      items.push(
-        evidence(context, {
-          id: "EVIDENCE_THREAT_INTEL",
-          category: "history",
-          label: dangerList.length
-            ? `Threat-intel match: ${dangerList.join(", ")}`
-            : cautionList.length
-              ? `Threat-intel caution flags: ${cautionList.join(", ")}`
-              : "No third-party threat-intel flags",
-          status: threatReport.overallStatus,
-          claim: dangerList.length
-            ? `Threat intelligence flagged this address across ${dangerList.length} source/category: ${dangerList.join(", ")}.`
-            : cautionList.length
-              ? `Threat intelligence flags caution categories: ${cautionList.join(", ")}.`
-              : "No threats listed across 3 independent threat intelligence sources (GoPlus Base, GoPlus Ethereum, ScamSniffer DB).",
-          source: "threat-intel-union",
-          method: "GoPlus (Base + Ethereum) + ScamSniffer DB",
-          rawValue: dangerList.length + cautionList.length,
-          facts: {
-            "GoPlus (Base)": threatReport.goplusBase.detail,
-            "GoPlus (Ethereum)": threatReport.goplusEth.detail,
-            "ScamSniffer DB":
-              threatReport.scamsniffer === "listed"
-                ? "Blacklisted Phishing/Drainer"
-                : threatReport.scamsniffer === "not-listed"
-                  ? "Not listed"
-                  : "Unavailable",
-            "Sources checked": `${threatReport.sourcesChecked}/3 providers`,
-          },
-          referenceUrl: "https://gopluslabs.io/",
-          limitations: [
-            "Third-party threat lists can lag fresh attackers and may contain stale or disputed entries; a flag is a strong signal, not proof, and a clean result is not a guarantee.",
-          ],
-        }),
-      );
-    } catch (error) {
-      items.push(
-        unavailableEvidence(
-          context,
-          "history",
-          "EVIDENCE_THREAT_INTEL",
-          "Threat-intel check unavailable",
-          "The third-party threat-intel provider could not be queried at scan time; this check is an explicit gap, not a pass.",
-          "threat-intel-union",
-          "GoPlus (Base + Ethereum) + ScamSniffer DB",
-          ["No threat-intel data was available; absence of evidence was not treated as evidence."],
-        ),
-      );
     }
   }
 

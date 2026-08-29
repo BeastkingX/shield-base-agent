@@ -49,7 +49,7 @@ async function fetchGoPlus(address: string, chainId: string): Promise<ThreatSour
     const url = `https://api.gopluslabs.io/api/v1/address_security/${address}?chain_id=${chainId}`;
     const res = await fetch(url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3500),
       headers: { "User-Agent": "Shield-Agent/1.0" },
     });
 
@@ -135,7 +135,7 @@ async function fetchScamSnifferList(): Promise<Set<string> | null> {
     const url = "https://raw.githubusercontent.com/scamsniffer/scam-database/main/blacklist/address.json";
     const res = await fetch(url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3500),
       headers: { "User-Agent": "Shield-Agent/1.0" },
     });
 

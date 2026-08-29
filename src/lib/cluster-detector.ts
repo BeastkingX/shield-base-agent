@@ -44,15 +44,16 @@ const GAS_HINT_WEI = BigInt("500000000000000"); // 0.0005 ETH
 const SWEEP_THRESHOLD_SECONDS = 30;
 const RAPID_FORWARD_SECONDS = 120;
 const MIN_VELOCITY_SAMPLES = 2;
-const TARGET_WINDOW = 50;
-const HOP_WINDOW = 25;
+const TARGET_WINDOW = 30;
+const HOP_WINDOW = 10;
 /**
  * Shared retry budget for one history window. analyzeClusterTaint reads up to
- * four windows, so this stays well inside the scan route's `maxDuration`.
- * Reduced from 10s to 6s to prevent Vercel platform timeouts that previously
- * returned non-JSON "An error occurred..." pages for flagged addresses.
+ * four windows (earliest+recent parallel, funder+hub parallel), so total worst
+ * is 2*budget. Reduced from 6s to 4s to stay inside Vercel's 26s hard budget
+ * when wallet path also runs history+approvals+threat in parallel.
+ * Honest partial-mode: if earliest window times out, recent window still counts.
  */
-const HISTORY_BUDGET_MS = 6_000;
+const HISTORY_BUDGET_MS = 4_000;
 
 interface IndexedTx {
   hash: string;
@@ -92,7 +93,7 @@ async function requestCompatTxList(
     url,
     { cache: "no-store" },
     {
-      timeoutMs: 3000,
+      timeoutMs: 2500,
       attempts: options.attempts,
       deadlineAt: options.deadlineAt,
       label: `Blockscout txlist (${options.withKey ? "keyed" : "keyless"})`,
@@ -168,7 +169,7 @@ async function fetchTxList(
       restUrl,
       { cache: "no-store" },
       {
-        timeoutMs: 3000,
+        timeoutMs: 2500,
         attempts: RETRY_ATTEMPTS,
         deadlineAt,
         label: "Blockscout REST v2",

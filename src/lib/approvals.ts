@@ -101,7 +101,9 @@ export async function fetchApprovalsForWallet(ownerAddress: Address): Promise<Ap
     logs = loadProbeLogs();
   }
 
-  // If no logs, try live query – safely handle non-JSON platform errors
+  // If no logs, try live query - safely handle non-JSON platform errors
+  // Reduced timeout to 3000ms and kept fromBlock 0 but with honest partial-mode:
+  // if this times out, caller will emit unavailableEvidence, not fake clean.
   if (logs.length === 0) {
     try {
       const paddedOwner = "0x000000000000000000000000" + normalizedOwner.replace(/^0x/, "");
@@ -109,7 +111,7 @@ export async function fetchApprovalsForWallet(ownerAddress: Address): Promise<Ap
 
       const response = await fetch(url, {
         headers: { "User-Agent": "Shield-Agent/1.0" },
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(3000),
         cache: "no-store",
       });
 
