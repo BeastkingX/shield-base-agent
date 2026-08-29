@@ -114,7 +114,7 @@ export function calculateEvidenceScore(receipt: ScanReceipt): EvidenceScoreResul
     return {
       score: cappedScore,
       breakdown,
-      grade: "Critical hazard — danger evidence fired",
+      grade: "Critical hazard. Danger evidence fired",
       tone: "danger",
       note: "Danger evidence is present. This is a scan-level observation, not a guarantee.",
     };
@@ -134,7 +134,7 @@ export function calculateEvidenceScore(receipt: ScanReceipt): EvidenceScoreResul
     return {
       score: cappedScore,
       breakdown,
-      grade: "Low observed risk — complete evidence",
+      grade: "Low observed risk. Complete evidence",
       tone: "safe",
       note: "No adverse signals in completed checks (not a guarantee).",
     };

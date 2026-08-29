@@ -20,7 +20,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Shield — Live verdict log",
+  title: "Shield | Live verdict log",
   description:
     "Automated re-scans of the Shield watchlist on Base Mainnet, with receipt digests you can verify yourself. Best-effort hourly.",
 };

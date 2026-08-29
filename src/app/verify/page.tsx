@@ -188,7 +188,7 @@ function VerifyContent() {
           {publishedHash && (
             <p className="verdictLogMeta" role="status">
               Comparing against the digest published in the live verdict log:{" "}
-              <span className="mono">{publishedHash}</span> — paste that receipt JSON
+              <span className="mono">{publishedHash}</span>. Paste that receipt JSON
               below; the digest your browser recomputes must match it exactly.
             </p>
           )}
@@ -236,7 +236,7 @@ function VerifyContent() {
               </div>
 
               <p className="verdictLogMeta">
-                Demo receipt — not a live verdict. These fixed samples exist only to
+                Demo receipt. Not a live verdict. These fixed samples exist only to
                 show how hash verification behaves; they are not scans of any live
                 address. Paste a receipt from a real scan to verify actual results.
               </p>

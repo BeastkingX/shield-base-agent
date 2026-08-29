@@ -285,3 +285,39 @@ describe("formatPenaltyTotal (disclosure formatting)", () => {
     expect(formatPenaltyTotal(360)).toBe("-360");
   });
 });
+
+describe("score grade copy has no em/en dashes", () => {
+  it("LOW, CAUTION, HIGH, and incomplete grades use periods, not dashes", () => {
+    const low = calculateEvidenceScore(
+      makeReceipt({ verdict: "LOW OBSERVED RISK", evidence: [item("EVIDENCE_CHAIN_STATE", "pass")] }),
+    );
+    expect(low.grade).toBe("Low observed risk. Complete evidence");
+    expect(low.grade).not.toContain("—");
+    expect(low.grade).not.toContain("–");
+
+    const caution = calculateEvidenceScore(
+      makeReceipt({ verdict: "CAUTION", evidence: [item("EVIDENCE_ACTIVE_APPROVALS", "warning")] }),
+    );
+    expect(caution.grade).toBe("Review required");
+    expect(caution.grade).not.toContain("—");
+    expect(caution.grade).not.toContain("–");
+
+    const high = calculateEvidenceScore(
+      makeReceipt({
+        verdict: "HIGH OBSERVED RISK",
+        evidence: [item("EVIDENCE_THREAT_INTEL", "danger")],
+        clusterAnalysis: makeCluster({ taintSeverity: "critical", hasTaint: true }),
+      }),
+    );
+    expect(high.grade).toBe("Critical hazard. Danger evidence fired");
+    expect(high.grade).not.toContain("—");
+    expect(high.grade).not.toContain("–");
+
+    const incomplete = calculateEvidenceScore(
+      makeReceipt({ coverage: { completed: 8, unavailable: 1, total: 9 } }),
+    );
+    expect(incomplete.grade).toBe("Score unavailable");
+    expect(incomplete.grade).not.toContain("—");
+    expect(incomplete.grade).not.toContain("–");
+  });
+});
