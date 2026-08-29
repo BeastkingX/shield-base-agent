@@ -67,6 +67,9 @@ export function evaluateRisk(
   }
 
   // Check for compound compromise: unverified delegation + rapid forwarding
+  // Precision fix: for recent-only forwarding (isSweeperActive false), do not claim
+  // "rapid automated forwarding" – use "recent rapid forwarding" unless a real
+  // sweeper (EVIDENCE_SWEEPER_BOT_ANALYSIS danger) is present.
   const delegateSignal = evidence.find(
     (e) =>
       e.id === "EVIDENCE_7702_DELEGATE" &&
@@ -77,17 +80,22 @@ export function evaluateRisk(
       e.id === "EVIDENCE_MONEY_TRAIL_CLUSTER" && e.status === "warning",
   );
   if (delegateSignal && forwardingSignal) {
+    const hasSweeperDanger = evidence.some(
+      (e) => e.id === "EVIDENCE_SWEEPER_BOT_ANALYSIS" && e.status === "danger",
+    );
     rules.push({
       id: "RULE_COMPOUND_COMPROMISE",
       effect: "high-risk",
-      explanation:
-        "Two independent measured signals corroborate: unverified execution delegation and rapid deposit forwarding, consistent with an actively compromised wallet.",
+      explanation: hasSweeperDanger
+        ? "Two independent measured signals corroborate: unverified execution delegation and rapid automated forwarding, consistent with an actively compromised wallet."
+        : "Two independent measured signals corroborate: unverified execution delegation and recent rapid forwarding, consistent with an actively compromised wallet.",
       evidenceIds: [delegateSignal.id, forwardingSignal.id],
     });
     return {
       verdict: "HIGH OBSERVED RISK",
-      summary:
-        "HIGH RISK: Shield measured two independent compromise signals (delegation to unverified code + rapid automated forwarding of deposits). Do not send funds to this address.",
+      summary: hasSweeperDanger
+        ? "HIGH RISK: Shield measured two independent compromise signals (delegation to unverified code + rapid automated forwarding of deposits). Do not send funds to this address."
+        : "HIGH RISK: Shield measured two independent compromise signals (delegation to unverified code + recent rapid forwarding of deposits). Do not send funds to this address.",
       rules,
     };
   }
