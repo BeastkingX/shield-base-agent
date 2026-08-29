@@ -1000,26 +1000,68 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
       }),
     );
   } else if (clusterAnalysis.taintSeverity === "warning") {
-    items.push(
-      evidence(context, {
-        id: "EVIDENCE_MONEY_TRAIL_CLUSTER",
-        category: "history",
-        label: "Automated forwarding measured (unattributed)",
-        status: "warning",
-        claim: `Deposits are forwarded quickly (median ${clusterAnalysis.sweepVelocitySeconds}s over ${clusterAnalysis.velocitySamples} sample(s)), but no dispenser-funder or aggregation-hub pattern was measured. Legitimate services (e.g. exchange deposit wallets) can show the same shape.`,
-        source: "shield-velocity-detector",
-        method: "Deposit-to-forward delta timing over indexed history",
-        rawValue: clusterAnalysis.sweepVelocitySeconds,
-        facts: {
-          "Median forward time (s)": clusterAnalysis.sweepVelocitySeconds,
-          "Samples": clusterAnalysis.velocitySamples,
-          "Top outflow destination": clusterAnalysis.sweepDestination,
-        },
-        limitations: [
-          "Fast forwarding alone does not prove malicious intent.",
-        ],
-      }),
-    );
+    // Precision fix: when recentRapidForwarding is true but isSweeperActive is false,
+    // do not describe lifetime median (e.g. 116681s) as "forwarded quickly".
+    // Explain distinction between lifetime median and recent deltas, use
+    // "recent rapid forwarding" wording, and keep honest no-dispenser statement.
+    const isRecentOnly = clusterAnalysis.recentRapidForwarding && !clusterAnalysis.isSweeperActive;
+    if (isRecentOnly) {
+      const recent = clusterAnalysis.recentDeltas || [];
+      const median = clusterAnalysis.sweepVelocitySeconds;
+      const recentStr = recent.length ? recent.map((s) => `${s}s`).join(" and ") : "unknown";
+      const medianStr = median !== null ? `${median}s` : "unknown";
+      items.push(
+        evidence(context, {
+          id: "EVIDENCE_MONEY_TRAIL_CLUSTER",
+          category: "history",
+          label: "Recent rapid forwarding measured (unattributed)",
+          status: "warning",
+          claim: `Recent deposits were forwarded in ${recentStr} (recent rapid forwarding), while the lifetime median across ${clusterAnalysis.velocitySamples} sample(s) is ${medianStr}. This indicates a recent behavioral change versus the longer history. No dispenser-funder or aggregation-hub pattern was measured. Legitimate services (e.g. exchange deposit wallets) can show the same shape.`,
+          source: "shield-velocity-detector",
+          method: "Deposit-to-forward delta timing over indexed history (recent vs lifetime median)",
+          rawValue: recent.length ? recent.join(",") : medianStr,
+          facts: {
+            "Recent deltas (s)": recent.length ? recent.join(", ") : "none",
+            "Lifetime median (s)": medianStr,
+            "Velocity samples": clusterAnalysis.velocitySamples,
+            "Top outflow destination": clusterAnalysis.sweepDestination,
+            "Seed funder": clusterAnalysis.seedFunder,
+            "Funder profile": clusterAnalysis.funderProfile,
+            "Hub profile": clusterAnalysis.hubProfile,
+          },
+          limitations: [
+            "Fast recent forwarding alone does not prove malicious intent; lifetime median provides context.",
+            "Analysis covers sampled transaction windows; older history may be out of scope.",
+          ],
+        }),
+      );
+    } else {
+      items.push(
+        evidence(context, {
+          id: "EVIDENCE_MONEY_TRAIL_CLUSTER",
+          category: "history",
+          label: clusterAnalysis.isSweeperActive
+            ? "Automated forwarding measured (unattributed)"
+            : "Recent rapid forwarding measured (unattributed)",
+          status: "warning",
+          claim: clusterAnalysis.isSweeperActive
+            ? `Deposits are forwarded quickly (median ${clusterAnalysis.sweepVelocitySeconds}s over ${clusterAnalysis.velocitySamples} sample(s)), but no dispenser-funder or aggregation-hub pattern was measured. Legitimate services (e.g. exchange deposit wallets) can show the same shape.`
+            : `Recent rapid forwarding was measured (recent deltas ${clusterAnalysis.recentDeltas.join("s and ")}s, lifetime median ${clusterAnalysis.sweepVelocitySeconds}s over ${clusterAnalysis.velocitySamples} sample(s)). No dispenser-funder or aggregation-hub pattern was measured. Legitimate services can show the same shape.`,
+          source: "shield-velocity-detector",
+          method: "Deposit-to-forward delta timing over indexed history",
+          rawValue: clusterAnalysis.sweepVelocitySeconds,
+          facts: {
+            "Median forward time (s)": clusterAnalysis.sweepVelocitySeconds,
+            "Recent deltas (s)": clusterAnalysis.recentDeltas.join(", "),
+            "Samples": clusterAnalysis.velocitySamples,
+            "Top outflow destination": clusterAnalysis.sweepDestination,
+          },
+          limitations: [
+            "Fast forwarding alone does not prove malicious intent.",
+          ],
+        }),
+      );
+    }
   } else {
     items.push(
       evidence(context, {

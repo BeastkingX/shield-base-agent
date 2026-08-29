@@ -351,8 +351,10 @@ export default function Home() {
    * Fastest measured outflow, split into value / qualifier so the number is
    * never mashed together with its meaning. Never reports "clean" for data
    * that could not be measured.
+   * Precision fix: when recentRapidForwarding is true but isSweeperActive is false,
+   * qualifier must be "(fast-forwarding)" with warning color, not clean.
    */
-  const outflowStat: { value: string; tag: string; tone: "danger" | "safe" | "muted" } =
+  const outflowStat: { value: string; tag: string; tone: "danger" | "safe" | "muted" | "warning" } =
     (() => {
       const cluster = receipt?.clusterAnalysis;
 
@@ -361,9 +363,27 @@ export default function Home() {
       }
 
       const seconds = cluster.sweepVelocitySeconds;
+      const recentRapid = cluster.recentRapidForwarding === true;
+      const isSweeper = cluster.isSweeperActive === true;
+
+      // Recent rapid forwarding but not proven sweeper: show fastest recent delta as fast-forwarding with warning tone
+      if (recentRapid && !isSweeper) {
+        const recentDeltas = cluster.recentDeltas || [];
+        const fastestRecent =
+          recentDeltas.length > 0 ? Math.min(...recentDeltas) : typeof seconds === "number" ? seconds : null;
+
+        let value: string;
+        if (fastestRecent === null) value = "—";
+        else if (fastestRecent < 60) value = `${fastestRecent}s`;
+        else if (fastestRecent < 3600) value = `${Math.round(fastestRecent / 60)}m`;
+        else if (fastestRecent < 86400) value = `${(fastestRecent / 3600).toFixed(1)}h`;
+        else value = `${Math.round(fastestRecent / 86400)}d`;
+
+        return { value, tag: "fast-forwarding", tone: "warning" };
+      }
 
       if (typeof seconds === "number") {
-        const fastForwarding = seconds <= 120 || cluster.isSweeperActive === true;
+        const fastForwarding = seconds <= 120 || isSweeper;
         let value: string;
         if (seconds < 60) value = `${seconds}s`;
         else if (seconds < 3600) value = `${Math.round(seconds / 60)}m`;
@@ -381,7 +401,7 @@ export default function Home() {
         };
       }
 
-      if (cluster.isSweeperActive) {
+      if (isSweeper) {
         return { value: "<8s", tag: "fast-forwarding", tone: "danger" };
       }
 
