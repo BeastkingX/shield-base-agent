@@ -4,6 +4,7 @@ import {
   getBlockscoutContractCreation,
   getBlockscoutRecentTransactions,
 } from "./blockscout-client";
+import { setRetrySleepForTesting } from "./retry";
 
 const ADDRESS = "0x4200000000000000000000000000000000000006" as Address;
 const HASH = `0x${"b".repeat(64)}`;
@@ -39,7 +40,53 @@ function restTransaction() {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  setRetrySleepForTesting(null);
 });
+
+/** Compatibility-API envelope Blockscout returns for `status: "1"`. */
+function compatEnvelope(result: unknown): Response {
+  return new Response(
+    JSON.stringify({ status: "1", message: "OK", result }),
+    { status: 200 },
+  );
+}
+
+/**
+ * Answers per Blockscout route instead of per call sequence, so the assertions
+ * stay readable now that a failing route is retried before falling through.
+ */
+function routeFetch(routes: {
+  keyedCompat?: () => Response;
+  keylessCompat?: () => Response;
+  rest?: () => Response;
+}) {
+  const calls: string[] = [];
+  const mock = vi.fn().mockImplementation(async (input: string | URL) => {
+    const url = new URL(String(input));
+    if (url.host === "api.blockscout.com" && url.pathname === "/v2/api") {
+      calls.push("keyedCompat");
+      return routes.keyedCompat?.() ?? new Response("no route", { status: 404 });
+    }
+    if (url.host === "base.blockscout.com" && url.pathname === "/api") {
+      calls.push("keylessCompat");
+      return (
+        routes.keylessCompat?.() ?? new Response("no route", { status: 404 })
+      );
+    }
+    if (url.host === "api.blockscout.com" && url.pathname.startsWith("/8453/")) {
+      calls.push("rest");
+      return routes.rest?.() ?? new Response("no route", { status: 404 });
+    }
+    calls.push(`unknown:${url.host}${url.pathname}`);
+    return new Response("unknown route", { status: 404 });
+  });
+
+  return { mock, calls };
+}
+
+function countRoute(calls: string[], route: string): number {
+  return calls.filter((call) => call === route).length;
+}
 
 describe("Blockscout PRO client", () => {
   it("does not make a request when the server key is missing", async () => {
@@ -110,18 +157,19 @@ describe("Blockscout PRO client", () => {
     expect(new URL(String(fetchMock.mock.calls[0]?.[0])).pathname).toBe("/v2/api");
   });
 
-  it("recovers through modern REST after compatibility history returns HTTP 500", async () => {
+  it("retries the keyed compatibility route, then the keyless route, then modern REST", async () => {
     vi.stubEnv("BLOCKSCOUT_API_KEY", "proapi_test");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response("error", { status: 500 }))
-      .mockResolvedValueOnce(
+    setRetrySleepForTesting(async () => {});
+    const { mock, calls } = routeFetch({
+      keyedCompat: () => new Response("error", { status: 500 }),
+      keylessCompat: () => new Response("error", { status: 503 }),
+      rest: () =>
         new Response(
           JSON.stringify({ items: [restTransaction()], next_page_params: null }),
           { status: 200 },
         ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    });
+    vi.stubGlobal("fetch", mock);
 
     const result = await getBlockscoutRecentTransactions(ADDRESS);
     expect(result.method).toBe("REST /addresses/{address}/transactions");
@@ -133,29 +181,63 @@ describe("Blockscout PRO client", () => {
       txreceipt_status: "1",
       functionName: "deposit",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    const requestUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    // 5xx is transient: the keyed route is retried 4 times before falling
+    // through, the keyless route is tried exactly once, REST succeeds first try.
+    expect(countRoute(calls, "keyedCompat")).toBe(4);
+    expect(countRoute(calls, "keylessCompat")).toBe(1);
+    expect(countRoute(calls, "rest")).toBe(1);
+
+    const restCall = mock.mock.calls.find((call) =>
+      String(call[0]).includes("/8453/api/v2/addresses/"),
+    );
+    const requestUrl = new URL(String(restCall?.[0]));
     expect(requestUrl.pathname).toBe(
       `/8453/api/v2/addresses/${ADDRESS}/transactions`,
     );
     expect(requestUrl.searchParams.get("apikey")).toBe("proapi_test");
   });
 
+  it("falls back to the keyless compatibility endpoint exactly once after a keyed failure", async () => {
+    vi.stubEnv("BLOCKSCOUT_API_KEY", "proapi_test");
+    setRetrySleepForTesting(async () => {});
+    const { mock, calls } = routeFetch({
+      keyedCompat: () => new Response("rate limited", { status: 429 }),
+      keylessCompat: () => compatEnvelope([compatibilityTransaction()]),
+      rest: () => new Response("must not be reached", { status: 500 }),
+    });
+    vi.stubGlobal("fetch", mock);
+
+    await expect(getBlockscoutRecentTransactions(ADDRESS)).resolves.toMatchObject({
+      method: "account.txlist",
+      transactions: [compatibilityTransaction()],
+    });
+
+    expect(countRoute(calls, "keyedCompat")).toBe(4);
+    expect(countRoute(calls, "keylessCompat")).toBe(1);
+    expect(countRoute(calls, "rest")).toBe(0);
+
+    const keylessCall = mock.mock.calls.find((call) =>
+      String(call[0]).startsWith("https://base.blockscout.com/api?"),
+    );
+    expect(keylessCall).toBeDefined();
+    const keylessUrl = new URL(String(keylessCall?.[0]));
+    expect(keylessUrl.searchParams.get("apikey")).toBeNull();
+    expect(keylessUrl.searchParams.get("action")).toBe("txlist");
+  });
+
   it("treats an empty REST items list as completed empty history", async () => {
     vi.stubEnv("BLOCKSCOUT_API_KEY", "proapi_test");
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response("error", { status: 500 }))
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({ items: [], next_page_params: null }),
-            { status: 200 },
-          ),
-        ),
-    );
+    setRetrySleepForTesting(async () => {});
+    const { mock } = routeFetch({
+      keyedCompat: () => new Response("error", { status: 500 }),
+      keylessCompat: () => new Response("error", { status: 500 }),
+      rest: () =>
+        new Response(JSON.stringify({ items: [], next_page_params: null }), {
+          status: 200,
+        }),
+    });
+    vi.stubGlobal("fetch", mock);
 
     await expect(getBlockscoutRecentTransactions(ADDRESS)).resolves.toEqual({
       transactions: [],
@@ -163,39 +245,51 @@ describe("Blockscout PRO client", () => {
     });
   });
 
-  it("rejects malformed responses from both transaction routes", async () => {
+  it("does not retry malformed responses from any transaction route", async () => {
     vi.stubEnv("BLOCKSCOUT_API_KEY", "proapi_test");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
+    setRetrySleepForTesting(async () => {});
+    const { mock, calls } = routeFetch({
+      keyedCompat: () =>
         new Response(JSON.stringify({ unexpected: true }), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
+      keylessCompat: () =>
+        new Response(JSON.stringify({ unexpected: true }), { status: 200 }),
+      rest: () =>
         new Response(JSON.stringify({ items: [{ bad: true }] }), { status: 200 }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    });
+    vi.stubGlobal("fetch", mock);
 
     await expect(getBlockscoutRecentTransactions(ADDRESS)).rejects.toMatchObject({
       name: "ExplorerUnavailableError",
       code: "api-error",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // A malformed body is a real answer, not a transient failure: one attempt each.
+    expect(countRoute(calls, "keyedCompat")).toBe(1);
+    expect(countRoute(calls, "keylessCompat")).toBe(1);
+    expect(countRoute(calls, "rest")).toBe(1);
   });
 
-  it("reports both route failures without converting them into risk evidence", async () => {
+  it("reports every route failure without converting them into risk evidence", async () => {
     vi.stubEnv("BLOCKSCOUT_API_KEY", "proapi_test");
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response("error", { status: 500 }))
-        .mockResolvedValueOnce(new Response("error", { status: 503 })),
-    );
+    setRetrySleepForTesting(async () => {});
+    const { mock } = routeFetch({
+      keyedCompat: () => new Response("error", { status: 500 }),
+      keylessCompat: () => new Response("error", { status: 502 }),
+      rest: () => new Response("error", { status: 503 }),
+    });
+    vi.stubGlobal("fetch", mock);
 
     await expect(getBlockscoutRecentTransactions(ADDRESS)).rejects.toMatchObject({
       name: "ExplorerUnavailableError",
       code: "api-error",
-      message: expect.stringContaining("Both Blockscout transaction routes failed"),
+      message: expect.stringContaining(
+        "All three Blockscout transaction routes failed",
+      ),
+    });
+    await expect(
+      getBlockscoutRecentTransactions(ADDRESS),
+    ).rejects.toMatchObject({
+      code: "api-error",
+      message: expect.stringContaining("keyless-compatibility"),
     });
   });
 });

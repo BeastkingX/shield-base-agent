@@ -144,7 +144,13 @@ code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow
 .canvas {
   background: var(--heroGlow);
   padding: 0 18px 60px;
-  padding-bottom: max(60px, calc(40px + env(safe-area-inset-bottom, 0px)));
+  /*
+   * The floating "Ask Shield" dock (bottom-right) and the theme toggle
+   * (bottom-left) are fixed overlays. 96px clears both plus the dock note, and
+   * the safe-area term keeps the last line of a receipt above the iOS home
+   * indicator instead of under the dock.
+   */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   min-height: 100vh;
 }
 
@@ -1673,17 +1679,37 @@ details[open] > summary .chev {
   overflow-x: auto;
   scrollbar-width: none;
   padding: 6px 0;
+  /* Edge fade masks so cards read as continuing off-screen. */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 4%,
+    #000 96%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 4%,
+    #000 96%,
+    transparent 100%
+  );
 }
 .carouselTrackWrapper::-webkit-scrollbar { display: none; }
 
 .carouselTrack {
   display: flex;
+  /* Equal-height cards: every card stretches to the tallest one. */
+  align-items: stretch;
   gap: 12px;
   width: max-content;
   animation: scrollTrack 45s linear infinite;
 }
+/* Pause on hover, on keyboard focus, and after the first pointerdown so a
+   card can be read, clicked, or copied without sliding away. */
 .carouselTrackWrapper:hover .carouselTrack,
-.carouselTrackWrapper:focus-within .carouselTrack {
+.carouselTrackWrapper:focus-within .carouselTrack,
+.carouselTrackWrapper[data-paused="true"] .carouselTrack {
   animation-play-state: paused;
 }
 
@@ -1698,6 +1724,8 @@ details[open] > summary .chev {
   border-radius: 16px;
   padding: 14px 18px;
   width: 280px;
+  height: 100%;
+  min-height: 128px;
   text-align: left;
   cursor: pointer;
   display: flex;
@@ -1736,6 +1764,13 @@ details[open] > summary .chev {
   font-weight: 650;
   color: var(--ink);
   line-height: 1.45;
+  /* The question is content, not chrome: it stays selectable and copyable. */
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.cardQuestion::selection {
+  background: var(--blueglow);
 }
 
 /* Modal Styling */
@@ -2354,4 +2389,316 @@ details[open] > summary .chev {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* ==========================================================================
+   Scan Stepper — four real client-side milestones
+   done = green check · active = blue border + glow + spinner · pending = muted
+   ========================================================================== */
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stepperTrack {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.stepperTrack span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--blue), var(--blue-hi));
+  transition: width 0.3s ease;
+}
+
+/* Desktop: one horizontal row of chips. */
+.stepperChips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.stepperChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+  background: var(--card);
+  transition: border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.chipMark {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  background: var(--line);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.chipLabel {
+  white-space: nowrap;
+}
+
+/* done */
+.stepperChip.is-done {
+  color: var(--ink);
+  border-color: var(--green);
+}
+.stepperChip.is-done .chipMark {
+  background: var(--greenbg);
+  color: var(--green);
+}
+
+/* active: blue border, glow, visible activity */
+.stepperChip.is-active {
+  color: var(--blue-hi);
+  border-color: var(--blue);
+  background: var(--card-solid);
+  box-shadow: 0 0 0 3px var(--blueglow), 0 0 18px var(--blueglow);
+}
+.stepperChip.is-active .chipMark {
+  background: var(--blue);
+  color: #ffffff;
+}
+
+/* pending: muted */
+.stepperChip.is-pending {
+  opacity: 0.6;
+}
+
+/* unavailable: never styled like a pass */
+.stepperChip.is-unavailable {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: var(--amberbg);
+}
+.stepperChip.is-unavailable .chipMark {
+  background: var(--amberbg);
+  color: var(--amber);
+}
+
+.chipFlag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.chipSpinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--blue);
+  animation: chipSpin 0.7s linear infinite;
+}
+
+@keyframes chipSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.stepperDone {
+  margin: 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   Stat card: value / label / qualifier kept separate
+   ========================================================================== */
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.statTag {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  color: var(--faint);
+}
+.statTag.tone-safe {
+  color: var(--green);
+}
+.statTag.tone-danger {
+  color: var(--red);
+}
+.statTag.tone-muted {
+  color: var(--faint);
+}
+
+/* ==========================================================================
+   Fired-because: rule plus the evidence IDs that produced it
+   ========================================================================== */
+
+.ruleGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ruleEvidence {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.ruleEvidenceLbl {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.evidencechip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--blue-hi);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.evidencechip:hover {
+  border-color: var(--blue);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Live verdict log
+   ========================================================================== */
+
+.verdictLogSection {
+  margin-top: 36px;
+}
+.verdictLogList {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.verdictLogRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 190px) 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 14px;
+  background: var(--card);
+  font-size: 12.5px;
+}
+.verdictLogTime {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.verdictLogTarget {
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.verdictLogTarget small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--faint);
+}
+.verdictPill {
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+.verdictPill.low-observed-risk {
+  color: var(--green);
+  background: var(--greenbg);
+  border-color: var(--green);
+}
+.verdictPill.caution {
+  color: var(--amber);
+  background: var(--amberbg);
+  border-color: var(--amber);
+}
+.verdictPill.high-observed-risk {
+  color: var(--red);
+  background: var(--redbg);
+  border-color: var(--red);
+}
+.verdictPill.insufficient-data {
+  color: var(--muted);
+  background: var(--line);
+}
+.verdictLogNote {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+.verdictLogMeta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  /* Mobile: 2x2 stage grid instead of a wrapped row. */
+  .stepperChips {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stepperChip {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .chipLabel {
+    white-space: normal;
+    font-size: 11.5px;
+  }
+  .verdictLogRow {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+.verdictPillWrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }

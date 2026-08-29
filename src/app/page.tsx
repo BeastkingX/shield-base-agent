@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { isAddress } from "viem";
 import type {
   EvidenceCategory,
   EvidenceFactValue,
@@ -16,13 +17,35 @@ import ProtectedSendModal from "@/components/ProtectedSendModal";
 import ReportWalletModal from "@/components/ReportWalletModal";
 import AiEducationCarousel from "@/components/AiEducationCarousel";
 import PopupInspector from "@/components/PopupInspector";
+import ScanStepper, { type StageState } from "@/components/ScanStepper";
 import ShieldLogo from "@/components/ShieldLogo";
 import Icon from "@/components/Icon";
 
 const DEMO_CONTRACT = "0x4200000000000000000000000000000000000006";
 const DEMO_VITALIK = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 const DEMO_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-const DEMO_SWEEPER_CAUGHT = "0x69620a2e27af4849bce5f70126ba1fc474c0e4a0";
+/**
+ * Real, third-party-flagged Base address used for the "caught live" demo.
+ * The HIGH OBSERVED RISK verdict is produced by the deterministic engine from
+ * live threat-intel and on-chain evidence at scan time. Shield never hardcodes
+ * the verdict: if the threat-intel providers are unreachable, the receipt says
+ * the check was unavailable instead of pretending the address is flagged.
+ */
+const DEMO_FLAGGED_LIVE = "0x00000c07575bb4e64457687a0382b4d3ea470000";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/**
+ * The four real client-side scan milestones. Each one flips only when the
+ * client has actually observed the corresponding event: local validation, a
+ * live Base block read, the scan response, and the deterministic rules inside
+ * that response. There are no timers standing in for progress.
+ */
+const SCAN_STAGES = [
+  { id: "validate", label: "Validate target" },
+  { id: "block", label: "Read Base block" },
+  { id: "evidence", label: "Collect indexed evidence" },
+  { id: "rules", label: "Apply deterministic rules" },
+] as const;
 
 const FILTERS: Array<{ id: "all" | EvidenceCategory; label: string }> = [
   { id: "all", label: "All evidence" },
@@ -73,7 +96,10 @@ function verdictClass(verdict: ScanReceipt["verdict"]): string {
 export default function Home() {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
-  const [scanStage, setScanStage] = useState(0);
+  const [stageStates, setStageStates] = useState<StageState[]>(
+    SCAN_STAGES.map(() => "pending"),
+  );
+  const [scanSummary, setScanSummary] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<ScanReceipt | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -137,28 +163,101 @@ export default function Home() {
   }, [receipt]);
 
   const runScan = useCallback(async (target: string) => {
-    setScanStage(0);
+    const startedAt = performance.now();
+    const trimmed = target.trim();
+
+    const setStage = (index: number, state: StageState) => {
+      setStageStates((previous) =>
+        previous.map((value, position) => (position === index ? state : value)),
+      );
+    };
+
     setLoading(true);
     setError("");
     setFilter("all");
-    setSrAnnouncement(`Scanning target ${target} on Base Mainnet...`);
+    setScanSummary(null);
+    setStageStates(SCAN_STAGES.map((_, index) => (index === 0 ? "active" : "pending")));
+    setSrAnnouncement("Stage 1 of 4: validating target.");
+
+    // Stage 1 — Validate target (local, no network).
+    if (!isAddress(trimmed)) {
+      setStage(0, "unavailable");
+      setError("Enter a valid EVM address.");
+      setSrAnnouncement("Stage 1 of 4 failed: the target is not a valid EVM address.");
+      setLoading(false);
+      return;
+    }
+    if (trimmed.toLowerCase() === ZERO_ADDRESS) {
+      setStage(0, "unavailable");
+      setError("The zero address cannot be scanned.");
+      setSrAnnouncement("Stage 1 of 4 failed: the zero address cannot be scanned.");
+      setLoading(false);
+      return;
+    }
+    setStage(0, "done");
+    setStage(1, "active");
+    setSrAnnouncement("Stage 2 of 4: reading the current Base block.");
+
+    // Stage 2 — Read Base block (a real eth_chainId + eth_getBlockNumber read).
+    // A failed pre-read is reported as unavailable; it never blocks the scan,
+    // because the scan itself reads chain state again server-side.
+    let blockStageOk = false;
+    try {
+      const healthResponse = await fetch("/api/health");
+      const healthData = await healthResponse.json();
+      if (healthResponse.ok && healthData?.chainId === 8453 && healthData?.blockNumber) {
+        setHealth(healthData);
+        setStage(1, "done");
+        blockStageOk = true;
+      } else {
+        setStage(1, "unavailable");
+      }
+    } catch {
+      setStage(1, "unavailable");
+    }
+
+    setStage(2, "active");
+    setSrAnnouncement("Stage 3 of 4: collecting indexed evidence from Base.");
 
     try {
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: target }),
+        body: JSON.stringify({ address: trimmed }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "The scan failed.");
+
+      setStage(2, "done");
+      setStage(3, "active");
+      setSrAnnouncement("Stage 4 of 4: applying deterministic rules.");
+
+      // Stage 4 — Apply deterministic rules. This completes only when the
+      // response actually carries the rules the engine fired.
+      const rulesApplied = Array.isArray(data.firedRules) && data.firedRules.length > 0;
+      setStage(3, rulesApplied ? "done" : "unavailable");
+
       setReceipt(data);
+
+      const completedStages =
+        1 + (blockStageOk ? 1 : 0) + 1 + (rulesApplied ? 1 : 0);
+      const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
+      setScanSummary(
+        `Completed in ${elapsedSeconds}s · ${completedStages}/4 stages`,
+      );
+
       const warnCount = data.evidence?.filter((e: EvidenceItem) => e.status === "warning" || e.status === "danger").length || 0;
-      setSrAnnouncement(`Result: ${data.verdict}. ${warnCount} warnings. ${data.coverage.completed} of ${data.coverage.total} checks completed.`);
+      setSrAnnouncement(
+        `Scan complete in ${elapsedSeconds} seconds. Result: ${data.verdict}. ${warnCount} warnings. ${data.coverage.completed} of ${data.coverage.total} checks completed.`,
+      );
       window.setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 120);
     } catch (caught) {
       const msg = caught instanceof Error ? caught.message : "The scan failed.";
+      setStageStates((previous) =>
+        previous.map((value) => (value === "active" ? "unavailable" : value)),
+      );
       setError(msg);
       setSrAnnouncement(`Scan error: ${msg}`);
     } finally {
@@ -195,6 +294,19 @@ export default function Home() {
     window.setTimeout(() => setCopied(""), 1800);
   }
 
+  /**
+   * Jumps from a fired rule to the exact evidence that produced it. Resets the
+   * category filter first so the target row can never be filtered out.
+   */
+  function focusEvidence(evidenceId: string) {
+    setFilter("all");
+    window.setTimeout(() => {
+      const node = document.getElementById(`evidence-${evidenceId}`);
+      if (node instanceof HTMLDetailsElement) node.open = true;
+      node?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+  }
+
   function downloadReceipt() {
     if (!receipt) return;
     const blob = new Blob([JSON.stringify(receipt, null, 2)], {
@@ -208,30 +320,59 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  const scanStages = [
-    "Validate target",
-    "Read Base block",
-    "Collect indexed evidence",
-    "Apply deterministic rules",
-  ];
-
   const dangerCount = receipt?.evidence.filter((e) => e.status === "danger").length || 0;
   const warningCount = receipt?.evidence.filter((e) => e.status === "warning").length || 0;
   const passCount = receipt?.evidence.filter((e) => e.status === "pass").length || 0;
   const infoCount = receipt?.evidence.filter((e) => e.status === "info").length || 0;
   const unavailableCount = receipt?.coverage.unavailable || 0;
 
-  const sweepVelocity = (() => {
-    const s = receipt?.clusterAnalysis?.sweepVelocitySeconds;
-    if (typeof s === "number") {
-      if (s <= 120) return `${s}s`;
-      if (s < 3600) return `${Math.round(s / 60)}m`;
-      if (s < 86400) return `${(s / 3600).toFixed(1)}h`;
-      return `${Math.round(s / 86400)}d (clean)`;
-    }
-    if (receipt?.clusterAnalysis?.isSweeperActive) return "<8s";
-    return "Clean";
-  })();
+  /**
+   * Fastest measured outflow, split into value / qualifier so the number is
+   * never mashed together with its meaning. Never reports "clean" for data
+   * that could not be measured.
+   */
+  const outflowStat: { value: string; tag: string; tone: "danger" | "safe" | "muted" } =
+    (() => {
+      const cluster = receipt?.clusterAnalysis;
+
+      if (!receipt || !cluster || cluster.analysisStatus === "unavailable") {
+        return { value: "—", tag: "history unavailable", tone: "muted" };
+      }
+
+      const seconds = cluster.sweepVelocitySeconds;
+
+      if (typeof seconds === "number") {
+        const fastForwarding = seconds <= 120 || cluster.isSweeperActive === true;
+        let value: string;
+        if (seconds < 60) value = `${seconds}s`;
+        else if (seconds < 3600) value = `${Math.round(seconds / 60)}m`;
+        else if (seconds < 86400) value = `${(seconds / 3600).toFixed(1)}h`;
+        else value = `${Math.round(seconds / 86400)}d`;
+
+        return {
+          value,
+          tag: fastForwarding
+            ? "fast-forwarding"
+            : cluster.analysisStatus === "partial"
+              ? "clean · partial data"
+              : "clean",
+          tone: fastForwarding ? "danger" : "safe",
+        };
+      }
+
+      if (cluster.isSweeperActive) {
+        return { value: "<8s", tag: "fast-forwarding", tone: "danger" };
+      }
+
+      return {
+        value: "—",
+        tag:
+          cluster.analysisStatus === "partial"
+            ? "no forward measured · partial data"
+            : "no forward measured",
+        tone: "muted",
+      };
+    })();
 
   return (
     <div className="canvas">
@@ -268,6 +409,9 @@ export default function Home() {
             </a>
             <Link href="/verify" className="navbtn">
               Verify
+            </Link>
+            <Link href="/verdicts" className="navbtn">
+              Verdict log
             </Link>
             <span className="navpill">
               <span className={`livedot ${health?.ok ? "" : "offline"}`} aria-hidden="true" />
@@ -349,11 +493,12 @@ export default function Home() {
                 type="button"
                 style={{ color: "var(--red)", borderColor: "rgba(251,75,99,.3)" }}
                 onClick={() => {
-                  setAddress(DEMO_SWEEPER_CAUGHT);
-                  runScan(DEMO_SWEEPER_CAUGHT);
+                  setAddress(DEMO_FLAGGED_LIVE);
+                  runScan(DEMO_FLAGGED_LIVE);
                 }}
               >
-                <Icon name="flag" size={12} /> caught live: phishing address <span className="arr">→</span>
+                <Icon name="flag" size={12} /> caught live: flagged address{" "}
+                <span className="arr">→</span>
               </button>
             </div>
 
@@ -367,18 +512,13 @@ export default function Home() {
               />
             </div>
 
-            {loading && (
-              <div className="scanProgress" role="status" aria-live="polite" style={{ marginTop: "16px" }}>
-                <div className="progressTrack">
-                  <span style={{ width: `${(scanStage + 1) * 25}%` }} />
-                </div>
-                <div className="progressStages" style={{ marginTop: "8px" }}>
-                  {scanStages.map((stage, index) => (
-                    <span className={index <= scanStage ? "active" : ""} key={stage}>
-                      {index < scanStage ? "✓" : index + 1} {stage}
-                    </span>
-                  ))}
-                </div>
+            {(loading || scanSummary) && (
+              <div style={{ marginTop: "16px" }}>
+                <ScanStepper
+                  stages={SCAN_STAGES}
+                  states={stageStates}
+                  summary={scanSummary}
+                />
               </div>
             )}
 
@@ -487,10 +627,11 @@ export default function Home() {
                   <div className="l">coverage</div>
                 </div>
                 <div className="stat">
-                  <div className="n">
-                    {sweepVelocity}
-                  </div>
+                  <div className="n">{outflowStat.value}</div>
                   <div className="l">fastest measured outflow</div>
+                  <span className={`statTag tone-${outflowStat.tone}`}>
+                    ({outflowStat.tag})
+                  </span>
                 </div>
                 <div className="stat">
                   <div className="n">{dangerCount + warningCount}</div>
@@ -507,8 +648,25 @@ export default function Home() {
               <div className="fired">
                 <span className="lbl">Fired because:</span>
                 {receipt.firedRules.map((rule) => (
-                  <span key={rule.id} className="rulechip">
-                    {rule.id}
+                  <span key={rule.id} className="ruleGroup">
+                    <span className="rulechip" title={rule.explanation}>
+                      {rule.id}
+                    </span>
+                    {rule.evidenceIds.length > 0 && (
+                      <span className="ruleEvidence">
+                        <span className="ruleEvidenceLbl">from</span>
+                        {rule.evidenceIds.map((evidenceId) => (
+                          <button
+                            key={evidenceId}
+                            type="button"
+                            className="evidencechip"
+                            onClick={() => focusEvidence(evidenceId)}
+                          >
+                            {evidenceId}
+                          </button>
+                        ))}
+                      </span>
+                    )}
                   </span>
                 ))}
               </div>
@@ -597,7 +755,7 @@ export default function Home() {
 
               {/* 3. One-Line Rows for Evidence Checks */}
               {filteredEvidence.map((item) => (
-                <details key={item.id}>
+                <details key={item.id} id={`evidence-${item.id}`}>
                   <summary className={`evidenceRow ${statusRowClass(item.status)}`}>
                     <span className="sw">{statusWord(item.status)}</span>
                     <span className="claim">{item.claim}</span>

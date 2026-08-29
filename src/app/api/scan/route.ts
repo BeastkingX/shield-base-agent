@@ -8,6 +8,13 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * A full Shield scan reads Base RPC, indexed history, approvals and threat
+ * intel, and every provider call now carries a bounded retry policy. 30s keeps
+ * the retries inside the platform limit instead of being killed mid-flight.
+ */
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
   const ip = clientIp(request);
   if (!rateLimit(`scan:${ip}`, 10, 60_000)) {

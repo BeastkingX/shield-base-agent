@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Address, Hex } from "viem";
 
 vi.mock("./base-client", () => ({
@@ -94,6 +94,40 @@ beforeEach(() => {
   vi.mocked(baseClient.getStorageAt).mockResolvedValue(
     `0x${"0".repeat(64)}` as Hex,
   );
+
+  // Threat intelligence is the only evidence collector that still talks to
+  // third-party HTTP endpoints (GoPlus, ScamSniffer) through global fetch.
+  // Without this stub the unit suite silently depends on outbound network
+  // access: EVIDENCE_THREAT_INTEL degrades to "unavailable" and coverage
+  // drops, so assertions that expect full coverage fail offline while passing
+  // in CI. Individual tests that want to exercise threat-intel parsing still
+  // call vi.stubGlobal("fetch", ...) themselves and override this default.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async (url: string | URL) => {
+      const urlStr = String(url);
+      if (urlStr.includes("gopluslabs.io")) {
+        return new Response(
+          JSON.stringify({
+            code: 1,
+            message: "ok",
+            result: { phishing_activities: "0", data_source: "GoPlus Lab" },
+          }),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes("scamsniffer")) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "not stubbed" }), {
+        status: 404,
+      });
+    }),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("Shield scan orchestration", () => {
@@ -207,6 +241,10 @@ describe("Shield scan orchestration", () => {
       "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
     );
     expect(baseClient.getStorageAt).not.toHaveBeenCalled();
+    // Guards the offline regression: threat intel must complete, not degrade.
+    expect(
+      receipt.evidence.find((item) => item.id === "EVIDENCE_THREAT_INTEL"),
+    ).toMatchObject({ status: "pass" });
     expect(receipt.coverage).toEqual({ completed: 9, unavailable: 0, total: 9 });
     expect(receipt.verdict).toBe("LOW OBSERVED RISK");
   });

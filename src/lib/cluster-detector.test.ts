@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { analyzeClusterTaint } from "./cluster-detector";
+import { setRetrySleepForTesting } from "./retry";
 
 /**
  * Fixtures model the exact order of explorer calls made by analyzeClusterTaint:
@@ -53,6 +54,7 @@ function mockExplorer(fixtures: Record<string, Record<string, FixtureTx[]>>) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  setRetrySleepForTesting(null);
 });
 
 describe("analyzeClusterTaint (real measurement engine)", () => {
@@ -209,5 +211,48 @@ describe("analyzeClusterTaint (real measurement engine)", () => {
     expect(result.hasTaint).toBe(true);
     expect(result.clusterTaintName).toBe("Recent rapid-forwarding state change");
     expect(result.forensicTraceNotes.join(" ")).toContain("behavioral state change");
+  });
+
+  it("returns partial analysis with recent velocity when only the earliest window fails", async () => {
+    setRetrySleepForTesting(async () => {});
+
+    const recentHistory = [
+      tx({ from: "0x1111111111111111111111111111111111111111", to: TARGET, value: ETH(0.01), timeStamp: "3000" }),
+      tx({ from: TARGET, to: HUB, value: ETH(0.01), timeStamp: "3008" }),
+      tx({ from: "0x2222222222222222222222222222222222222222", to: TARGET, value: ETH(0.01), timeStamp: "4000" }),
+      tx({ from: TARGET, to: HUB, value: ETH(0.01), timeStamp: "4006" }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        const address = (url.searchParams.get("address") ?? "").toLowerCase();
+        const sort = url.searchParams.get("sort") ?? "asc";
+
+        // The genesis-side window is unreadable on every route.
+        if (address === TARGET && sort === "asc") {
+          return new Response("explorer down", { status: 500 });
+        }
+
+        const rows = address === TARGET ? recentHistory : [];
+        return new Response(
+          JSON.stringify({ status: "1", message: "OK", result: rows }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await analyzeClusterTaint(TARGET as `0x${string}`);
+
+    // The recent window still carries usable evidence: it must not be discarded.
+    expect(result.analysisStatus).toBe("partial");
+    expect(result.sampledTransactions).toBe(4);
+    expect(result.velocitySamples).toBe(2);
+    expect(result.sweepVelocitySeconds).toBe(7);
+    expect(result.isSweeperActive).toBe(true);
+    const notes = result.forensicTraceNotes.join(" ");
+    expect(notes).toContain("earliest unread");
+    expect(notes).toContain("Incomplete history");
   });
 });
