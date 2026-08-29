@@ -180,4 +180,22 @@ describe("WalletHealthCard raw evidence toggle (behavioral)", () => {
     expect(text).not.toMatch(/private\s+key\s*[:=]/i);
     expect(text).not.toMatch(/api[_-]?key\s*[:=]/i);
   });
+
+  it("raw evidence copy has no em dashes or en dashes", () => {
+    render(<Harness receipt={makeReceipt()} />);
+    fireEvent.click(screen.getByText("Inspect Raw Evidence ▼"));
+
+    const panel = within(screen.getByTestId("raw-evidence-panel"));
+    const sub = panel.getByText(/Public technical facts only/);
+    expect(sub.textContent).toBe(
+      "Public technical facts only. No private keys, seed phrases, API keys, or credentials.",
+    );
+    expect(sub.textContent).not.toContain("—");
+    expect(sub.textContent).not.toContain("–");
+
+    // No dash characters anywhere in the rendered raw-evidence panel copy.
+    const panelText = screen.getByTestId("raw-evidence-panel").textContent ?? "";
+    expect(panelText).not.toContain("—");
+    expect(panelText).not.toContain("–");
+  });
 });

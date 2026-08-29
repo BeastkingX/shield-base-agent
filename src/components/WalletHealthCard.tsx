@@ -274,7 +274,7 @@ export default function WalletHealthCard({
           <div className="rawEvidenceHeader">
             <span className="rawEvidenceTitle">Raw scan evidence</span>
             <span className="rawEvidenceSub">
-              Public technical facts only — no private keys, seed phrases, API keys, or credentials.
+              Public technical facts only. No private keys, seed phrases, API keys, or credentials.
             </span>
           </div>
 
