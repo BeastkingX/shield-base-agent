@@ -62,7 +62,15 @@ describe("Finding 13 presentation: readable score disclosure (presentation-only)
     expect(component).toContain("warningPenaltyTotal");
     expect(component).toContain("dangerPenaltyTotal");
     expect(component).toContain("=");
-    expect(component).toContain("-{breakdown.warningPenaltyPer} × {breakdown.warningCount} = -{breakdown.warningPenaltyTotal}");
+    expect(component).toContain("formatPenaltyTotal(breakdown.warningPenaltyTotal)");
+    expect(component).toContain("formatPenaltyTotal(breakdown.dangerPenaltyTotal)");
+  });
+
+  it("formats zero penalty totals as 0, never -0", () => {
+    // The raw "-{total}" string must not be emitted (that produced "-0").
+    expect(component).not.toContain("= -{breakdown.warningPenaltyTotal}");
+    expect(component).not.toContain("= -{breakdown.dangerPenaltyTotal}");
+    expect(component).toContain("formatPenaltyTotal");
   });
 
   it("emphasizes the final score row and keeps 800 / 1,000 display intact", () => {

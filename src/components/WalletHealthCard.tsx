@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
 import { shortAddress } from "@/lib/wallet";
-import { calculateEvidenceScore, type EvidenceScoreTone } from "@/lib/evidence-score";
+import {
+  calculateEvidenceScore,
+  formatPenaltyTotal,
+  type EvidenceScoreTone,
+} from "@/lib/evidence-score";
 import Icon from "./Icon";
 
 interface WalletHealthCardProps {
@@ -161,14 +165,14 @@ export default function WalletHealthCard({
               <div className="scoreRow">
                 <span className="scoreRowLabel">Warning checks</span>
                 <span className="scoreRowValue">
-                  -{breakdown.warningPenaltyPer} × {breakdown.warningCount} = -{breakdown.warningPenaltyTotal}
+                  -{breakdown.warningPenaltyPer} × {breakdown.warningCount} = {formatPenaltyTotal(breakdown.warningPenaltyTotal)}
                 </span>
               </div>
 
               <div className="scoreRow">
                 <span className="scoreRowLabel">Danger checks</span>
                 <span className="scoreRowValue">
-                  -{breakdown.dangerPenaltyPer} × {breakdown.dangerCount} = -{breakdown.dangerPenaltyTotal}
+                  -{breakdown.dangerPenaltyPer} × {breakdown.dangerCount} = {formatPenaltyTotal(breakdown.dangerPenaltyTotal)}
                 </span>
               </div>
 

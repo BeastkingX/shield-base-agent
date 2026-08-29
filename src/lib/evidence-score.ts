@@ -51,8 +51,7 @@ export interface EvidenceScoreResult {
   note: string;
 }
 
-export function calculateEvidenceScore(receipt: ScanReceipt): EvidenceScoreResult {
-  const coverage = receipt.coverage ?? { completed: 0, unavailable: 0, total: 0 };
+export function calculateEvidenceScore(receipt: ScanReceipt): EvidenceScoreResult {  const coverage = receipt.coverage ?? { completed: 0, unavailable: 0, total: 0 };
   const cluster = receipt.clusterAnalysis;
   const clusterIncomplete = (cluster?.analysisStatus ?? "unavailable") !== "completed";
   const incomplete = coverage.unavailable > 0 || clusterIncomplete;
@@ -149,4 +148,13 @@ export function calculateEvidenceScore(receipt: ScanReceipt): EvidenceScoreResul
     tone: "muted",
     note: "Score unavailable for this verdict.",
   };
+}
+
+/**
+ * Formats a penalty total for the disclosure rows: zero renders as "0"
+ * (never "-0"), while a nonzero penalty renders as a negative value.
+ * Presentation-only helper — does not affect scoring.
+ */
+export function formatPenaltyTotal(total: number): string {
+  return total === 0 ? "0" : `-${total}`;
 }

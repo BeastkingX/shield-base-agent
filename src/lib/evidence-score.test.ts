@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateEvidenceScore,
+  formatPenaltyTotal,
   SCORE_MAX,
   WARNING_PENALTY,
   DANGER_PENALTY,
@@ -269,5 +270,18 @@ describe("Finding 12: warning must never be styled as danger", () => {
     );
     expect(result.tone).toBe("danger");
     expect(result.score).toBeLessThan(HIGH_SCORE_CAP + 1);
+  });
+});
+
+describe("formatPenaltyTotal (disclosure formatting)", () => {
+  it("renders zero as 0, never -0", () => {
+    expect(formatPenaltyTotal(0)).toBe("0");
+    expect(formatPenaltyTotal(0)).not.toBe("-0");
+  });
+
+  it("renders nonzero penalties as negative values", () => {
+    expect(formatPenaltyTotal(WARNING_PENALTY)).toBe(`-${WARNING_PENALTY}`);
+    expect(formatPenaltyTotal(DANGER_PENALTY)).toBe(`-${DANGER_PENALTY}`);
+    expect(formatPenaltyTotal(360)).toBe("-360");
   });
 });
