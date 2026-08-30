@@ -6,6 +6,7 @@ import {
   type IndexedTransaction,
 } from "./etherscan-client";
 import { fetchWithRetry } from "./retry";
+import { getCachedTxs, setCachedTxs } from "./tx-cache";
 
 const BLOCKSCOUT_PRO_URL = "https://api.blockscout.com/v2/api";
 const BLOCKSCOUT_REST_URL = "https://api.blockscout.com/8453/api/v2";
@@ -260,6 +261,15 @@ export async function getBlockscoutRecentTransactions(
   address: Address,
   limit = 10,
 ): Promise<BlockscoutTransactionHistory> {
+  // Serve from the shared cache so the wallet-history evidence and the cluster
+  // detector never hit Blockscout twice for the same recent window.
+  const cached = getCachedTxs(address, "desc", limit);
+  if (cached) {
+    return {
+      transactions: cached as IndexedTransaction[],
+      method: "account.txlist",
+    };
+  }
   apiKey();
   const failures: string[] = [];
   // One shared budget across all three routes keeps the retry policy inside
@@ -290,15 +300,14 @@ export async function getBlockscoutRecentTransactions(
 
   // Route 1: keyed compatibility API, with the full retry policy.
   try {
-    return {
-      transactions: parseTxList(
-        await callBlockscout(txlistParameters, {
-          allowEmptyResult: true,
-          deadlineAt,
-        }),
-      ),
-      method: "account.txlist",
-    };
+    const transactions = parseTxList(
+      await callBlockscout(txlistParameters, {
+        allowEmptyResult: true,
+        deadlineAt,
+      }),
+    );
+    setCachedTxs(address, "desc", transactions);
+    return { transactions, method: "account.txlist" };
   } catch (error) {
     failures.push(
       `compatibility: ${error instanceof Error ? error.message : "request failed"}`,

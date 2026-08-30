@@ -1071,7 +1071,7 @@ export async function runShieldScan(address: Address): Promise<ScanReceipt> {
         status: "pass",
         claim: `Shield sampled ${clusterAnalysis.sampledTransactions} transaction(s), identified the seed funder (${clusterAnalysis.seedFunder}), and measured deposit-to-forward timing. No sweeper or cluster pattern was detected in the sampled history.`,
         source: "shield-cluster-traversal",
-        method: "1-hop upstream + 1-hop downstream + delta timing (Blockscout txlist)",
+        method: "2-hop upstream funder-of-funder + downstream hub + deposit-to-forward delta timing (Blockscout txlist)",
         rawValue: "no-pattern-measured",
         facts: {
           "Seed funder": clusterAnalysis.seedFunder,

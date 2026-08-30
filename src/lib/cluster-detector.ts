@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 import { fetchWithRetry, RETRY_ATTEMPTS } from "./retry";
+import { getCachedTxs, setCachedTxs } from "./tx-cache";
 
 /**
  * Shield Cluster Detector v2, High-Performance Real Measurement Engine.
@@ -54,6 +55,13 @@ const HOP_WINDOW = 10;
  * Honest partial-mode: if earliest window times out, recent window still counts.
  */
 const HISTORY_BUDGET_MS = 4_000;
+/**
+ * A dedicated budget for the hop-2 (funder) and hub reads. Sharing the same
+ * deadline as the earliest/recent windows meant the funder's history was almost
+ * always cut short (leaving hop2Funder null and funderType "Unread"). A fresh
+ * budget lets the 2-hop traversal actually complete.
+ */
+const HOP_BUDGET_MS = 4_000;
 
 interface IndexedTx {
   hash: string;
@@ -124,14 +132,18 @@ async function requestCompatTxList(
   throw new Error(`compatibility route rejected the request (${body.message ?? "unknown"})`);
 }
 
-async function fetchTxList(
+async function requestTxList(
   address: string,
-  options: { sort?: "asc" | "desc"; offset?: number } = {},
+  options: { sort?: "asc" | "desc"; offset?: number; budgetMs?: number } = {},
 ): Promise<IndexedTx[]> {
-  const { sort = "asc", offset = TARGET_WINDOW } = options;
+  const {
+    sort = "asc",
+    offset = TARGET_WINDOW,
+    budgetMs = HISTORY_BUDGET_MS,
+  } = options;
   const apiKey = process.env.BLOCKSCOUT_API_KEY?.trim();
   // One shared budget so retries cannot outlast the calling API route.
-  const deadlineAt = Date.now() + HISTORY_BUDGET_MS;
+  const deadlineAt = Date.now() + budgetMs;
   const errors: string[] = [];
 
   // 1. Keyed compatibility API (full retry policy), or the public one when no
@@ -209,6 +221,26 @@ async function fetchTxList(
   }
 
   throw new Error(`indexed history unavailable (${errors.join(" | ")})`);
+}
+
+/**
+ * Cached wrapper around requestTxList. Serves a shared recent-history window to
+ * both the cluster detector and the wallet-history evidence, and makes repeat
+ * scans of the same address deterministic instead of re-triggering a throttled
+ * Blockscout quota. Each call may budget its own wall-clock time (see hop-2).
+ */
+async function fetchTxList(
+  address: string,
+  options: { sort?: "asc" | "desc"; offset?: number; budgetMs?: number } = {},
+): Promise<IndexedTx[]> {
+  const { sort = "asc", offset = TARGET_WINDOW, budgetMs = HISTORY_BUDGET_MS } = options;
+
+  const cached = getCachedTxs(address, sort, offset);
+  if (cached) return cached as IndexedTx[];
+
+  const txs = await requestTxList(address, { sort, offset, budgetMs });
+  setCachedTxs(address, sort, txs);
+  return txs;
 }
 
 const isSuccessful = (tx: IndexedTx): boolean =>
@@ -345,8 +377,12 @@ export async function analyzeClusterTaint(
   let hubType = hub && outbound.length >= 3 ? "Analyzing hub..." : "No outbound forwarding observed";
 
   const [funderHopRes, hubHopRes] = await Promise.allSettled([
-    seedFunder ? fetchTxList(seedFunder, { sort: "asc", offset: HOP_WINDOW }) : Promise.resolve([]),
-    hub && outbound.length >= 3 ? fetchTxList(hub, { sort: "desc", offset: HOP_WINDOW }) : Promise.resolve([]),
+    seedFunder
+      ? fetchTxList(seedFunder, { sort: "asc", offset: HOP_WINDOW, budgetMs: HOP_BUDGET_MS })
+      : Promise.resolve([]),
+    hub && outbound.length >= 3
+      ? fetchTxList(hub, { sort: "desc", offset: HOP_WINDOW, budgetMs: HOP_BUDGET_MS })
+      : Promise.resolve([]),
   ]);
 
   // Process funder hop
