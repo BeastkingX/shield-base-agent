@@ -107,7 +107,6 @@ export default function AgentCopilot({
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const launcherButtonRef = useRef<HTMLButtonElement>(null);
   const drawerPanelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -229,7 +228,6 @@ export default function AgentCopilot({
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
-        launcherButtonRef.current?.focus();
       }
     };
 
@@ -264,34 +262,12 @@ export default function AgentCopilot({
 
   return (
     <>
-      {/* Floating Dock Launcher Button */}
-      <button
-        ref={launcherButtonRef}
-        type="button"
-        className={`floatingDockLauncher ${isOpen ? "launcherActive" : ""}`}
-        onClick={() => {
-          if (isOpen) {
-            onClose();
-          } else {
-            onOpen();
-          }
-        }}
-        aria-label="Open Shield AI Security Detective Copilot"
-        aria-expanded={isOpen}
-        aria-controls="shield-chat-dock"
-      >
-        <Icon name="bot" size={16} />
-        <span className="dockLabel">Ask Shield</span>
-        {receipt && <span className="dockContextDot" title="Scan receipt grounded" />}
-      </button>
-
-      {/* Slide-over Drawer / Floating Dock Panel */}
+      {/* Single launcher lives in page.tsx .dock .dockbtn; this component renders only the drawer */}
       {isOpen && (
         <div
           className="dockBackdrop"
           onClick={() => {
             onClose();
-            launcherButtonRef.current?.focus();
           }}
           aria-hidden="true"
         />
@@ -335,7 +311,6 @@ export default function AgentCopilot({
               className="dockCloseBtn"
               onClick={() => {
                 onClose();
-                launcherButtonRef.current?.focus();
               }}
               aria-label="Close Shield Copilot drawer"
             >

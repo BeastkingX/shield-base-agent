@@ -3,6 +3,11 @@
 import { useState, useEffect } from "react";
 import type { ScanReceipt } from "@/lib/scan-types";
 import { shortAddress } from "@/lib/wallet";
+import {
+  calculateEvidenceScore,
+  formatPenaltyTotal,
+  type EvidenceScoreTone,
+} from "@/lib/evidence-score";
 import Icon from "./Icon";
 
 interface WalletHealthCardProps {
@@ -29,11 +34,16 @@ export default function WalletHealthCard({
       .catch(() => {});
   }, []);
 
-  const isSweeper = receipt.clusterAnalysis?.isSweeperActive;
-  const isTainted = receipt.clusterAnalysis?.hasTaint;
+  const cluster = receipt.clusterAnalysis;
+  const isSweeper = cluster?.isSweeperActive ?? false;
+  const hasTaint = cluster?.hasTaint ?? false;
+  const taintSeverity = cluster?.taintSeverity ?? "none";
+  // Finding 12: a "warning" taint is NOT danger. Only "critical" taint or an
+  // active sweeper may use danger styling; a recent-forwarding warning is amber.
+  const isCriticalTaint = hasTaint && taintSeverity === "critical";
+  const isWarningTaint = hasTaint && taintSeverity === "warning";
   const approvalsCount = receipt.approvalsSummary?.totalCount || 0;
   const unlimitedCount = receipt.approvalsSummary?.unlimitedCount || 0;
-  const warningCount = receipt.evidence.filter((e) => e.status === "warning").length;
 
   // Derive native ETH balance
   const balanceEvidence = receipt.evidence.find((e) => e.id === "EVIDENCE_NATIVE_BALANCE");
@@ -41,42 +51,70 @@ export default function WalletHealthCard({
   const balanceEthNum = parseFloat(rawBalanceEthStr.replace(" ETH", "")) || 0;
   const balanceUsd = (balanceEthNum * ethPrice).toFixed(2);
 
-  // Derive txCount
-  const txCountItem = receipt.evidence.find((e) => e.id === "EVIDENCE_TRANSACTION_COUNT");
-  const txCount = (txCountItem?.facts?.["Transaction count"] as number) || 0;
+  // Honesty fix: check for incomplete coverage / money trail unavailable
+  const hasUnavailable = receipt.coverage.unavailable > 0;
+  const moneyTrailEvidence = receipt.evidence.find((e) => e.id === "EVIDENCE_MONEY_TRAIL");
+  const isMoneyTrailUnavailable = moneyTrailEvidence?.status === "unavailable";
+  const clusterStatus = cluster?.analysisStatus;
+  const isClusterIncomplete = clusterStatus !== "completed";
+  const isIncomplete = hasUnavailable || isClusterIncomplete || isMoneyTrailUnavailable;
 
-  // Rule 3: 1,000-Point Score strictly derived from deterministic verdict + evidence
-  const isDanger = receipt.verdict === "HIGH OBSERVED RISK" || isSweeper || isTainted;
-  const isCaution = receipt.verdict === "CAUTION";
-  const isLowRisk = receipt.verdict === "LOW OBSERVED RISK";
+  // Finding 13: deterministic Observed Evidence Score (pure function), no
+  // hard-coded reputation numbers and no balance/tx-count bonus. The verdict
+  // stays authoritative; the score is display-only.
+  const scoreResult = calculateEvidenceScore(receipt);
+  const { score: evidenceScore, breakdown, grade, tone, note: scoreNote } = scoreResult;
 
-  const { reputationScore, reputationGrade } = (() => {
-    if (isDanger) {
-      const score = isSweeper ? 0 : 120;
+  const toneClasses: Record<EvidenceScoreTone, { score: string; grade: string }> = {
+    safe: { score: "", grade: "vSafe" },
+    warn: { score: "scoreWarn", grade: "vWarn" },
+    danger: { score: "scoreDanger", grade: "vDanger" },
+    incomplete: { score: "scoreIncomplete", grade: "vIncomplete" },
+    muted: { score: "scoreUnrated", grade: "vMuted" },
+  };
+
+  const securityHealth = (() => {
+    if (isSweeper) {
       return {
-        reputationScore: score,
-        reputationGrade: "Tier 5 · Critical Hazard / Blacklisted",
+        text: "Active Sweeper Bot Detected (Inflows drained in <8s)",
+        tone: "vDanger",
       };
     }
-    if (isCaution) {
-      const score = warningCount >= 2 ? 450 : 600;
-      const tier = warningCount >= 2 ? "Tier 4 · Caution" : "Tier 3 · Review Required";
+    if (isCriticalTaint) {
       return {
-        reputationScore: score,
-        reputationGrade: tier,
+        text: `Drainer Cluster Taint (${cluster?.clusterTaintName || "Phishing Network"})`,
+        tone: "vDanger",
       };
     }
-    if (isLowRisk) {
-      const score = approvalsCount === 0 && txCount >= 20 ? 950 : 800;
-      const tier = score >= 900 ? "Tier 1 · Prime Trust (A+)" : "Tier 2 · Verified & Active (A)";
+    if (isIncomplete) {
+      if (isMoneyTrailUnavailable) {
+        return {
+          text: "Incomplete checks (Money trail unavailable)",
+          tone: "vIncomplete",
+        };
+      }
       return {
-        reputationScore: score,
-        reputationGrade: tier,
+        text: hasUnavailable
+          ? `Incomplete checks (${receipt.coverage.unavailable} unavailable) · Review required`
+          : "Unrated · Score unavailable · Review required",
+        tone: "vIncomplete",
+      };
+    }
+    if (isWarningTaint) {
+      return {
+        text: "Review required (recent rapid forwarding)",
+        tone: "vWarn",
+      };
+    }
+    if (receipt.verdict === "CAUTION") {
+      return {
+        text: "Review Required (1+ Warnings Fired)",
+        tone: "vWarn",
       };
     }
     return {
-      reputationScore: 500,
-      reputationGrade: "Unrated",
+      text: "Secure (Clean 2-Hop Money Trail & Seed Funder)",
+      tone: "vSafe",
     };
   })();
 
@@ -97,17 +135,75 @@ export default function WalletHealthCard({
           </div>
         </div>
 
-        {/* 1,000-Point Institutional Reputation Score Meter */}
-        <div className="reputationScoreBox">
-          <div className="scoreNumber">
-            <span className="scoreValue">{reputationScore}</span>
-            <span className="scoreMax">/ 1,000</span>
+        {/* Observed Evidence Score — scan-level summary, not a reputation/trust rating */}
+        <div className="scoreArea">
+          <div className="reputationScoreBox">
+            <div className="scoreNumber">
+              <span className={`scoreValue ${toneClasses[tone].score}`}>
+                {evidenceScore === null ? "—" : evidenceScore}
+              </span>
+              <span className="scoreMax">/ 1,000</span>
+            </div>
+            <div className="scoreMeta">
+              <strong>Observed Evidence Score</strong>
+              <span className={toneClasses[tone].grade}>{grade}</span>
+              <small className="scoreSubNote">{scoreNote}</small>
+            </div>
           </div>
-          <div className="scoreMeta">
-            <strong>Reputation Score</strong>
-            <span>{reputationGrade}</span>
-            <small className="scoreSubNote">Score computed from this scan's fired rules.</small>
-          </div>
+
+          {/* Finding 13: visible calculation disclosure — readable label/value rows */}
+          <details className="scoreDisclosure">
+            <summary>How this score was calculated</summary>
+            <div className="scoreBreakdown">
+              <div className="scoreBreakdownHeader">Score method</div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Starting score</span>
+                <span className="scoreRowValue">{breakdown.startingScore.toLocaleString()}</span>
+              </div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Warning checks</span>
+                <span className="scoreRowValue">
+                  -{breakdown.warningPenaltyPer} × {breakdown.warningCount} = {formatPenaltyTotal(breakdown.warningPenaltyTotal)}
+                </span>
+              </div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Danger checks</span>
+                <span className="scoreRowValue">
+                  -{breakdown.dangerPenaltyPer} × {breakdown.dangerCount} = {formatPenaltyTotal(breakdown.dangerPenaltyTotal)}
+                </span>
+              </div>
+
+              <div className="scoreRow">
+                <span className="scoreRowLabel">Coverage</span>
+                <span className="scoreRowValue">
+                  {breakdown.coverageCompleted}/{breakdown.coverageTotal}
+                </span>
+              </div>
+
+              {breakdown.verdictCeiling !== null && (
+                <div className="scoreRow">
+                  <span className="scoreRowLabel">Verdict ceiling</span>
+                  <span className="scoreRowValue">
+                    {receipt.verdict} ≤ {breakdown.verdictCeiling}
+                  </span>
+                </div>
+              )}
+
+              <div className="scoreRow scoreRowFinal">
+                <span className="scoreRowLabel">Final evidence score</span>
+                <span className="scoreRowValue">
+                  {evidenceScore === null ? "—" : `${evidenceScore} / 1,000`}
+                </span>
+              </div>
+            </div>
+            <p className="scoreDisclosureNote">
+              This is a scan-level summary of observed evidence. It is not a guarantee,
+              identity rating, or permanent reputation.
+            </p>
+          </details>
         </div>
       </div>
 
@@ -117,14 +213,8 @@ export default function WalletHealthCard({
           <span className="k">
             <Icon name="shield-alert" size={14} className="kvIcon" /> Security & Compromise Health
           </span>
-          <span className={`v ${isDanger ? "vDanger" : isCaution ? "vWarn" : "vSafe"}`}>
-            {isSweeper
-              ? "Active Sweeper Bot Detected (Inflows drained in <8s)"
-              : isTainted
-              ? `Drainer Cluster Taint (${receipt.clusterAnalysis?.clusterTaintName || "Phishing Network"})`
-              : isCaution
-              ? "Review Required (1+ Warnings Fired)"
-              : "Secure (Clean 2-Hop Money Trail & Seed Funder)"}
+          <span className={`v ${securityHealth.tone}`}>
+            {securityHealth.text}
           </span>
         </div>
 
@@ -166,11 +256,99 @@ export default function WalletHealthCard({
             type="button"
             className="ghostbtn"
             onClick={onToggleTechnicalEvidence}
+            aria-expanded={showTechnicalEvidence}
+            aria-controls="raw-evidence-panel"
           >
             {showTechnicalEvidence ? "Hide Raw Evidence ▲" : "Inspect Raw Evidence ▼"}
           </button>
         </div>
       </div>
+
+      {/* Raw scan evidence panel — public technical facts only (no credentials) */}
+      {showTechnicalEvidence && (
+        <div
+          className="rawEvidencePanel"
+          id="raw-evidence-panel"
+          data-testid="raw-evidence-panel"
+        >
+          <div className="rawEvidenceHeader">
+            <span className="rawEvidenceTitle">Raw scan evidence</span>
+            <span className="rawEvidenceSub">
+              Public technical facts only. No private keys, seed phrases, API keys, or credentials.
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Receipt hash</span>
+            <span className="rawFactValue">
+              {receipt.receiptHash
+                ? `${receipt.receiptHash.slice(0, 18)}…${receipt.receiptHash.slice(-8)}`
+                : "Not available"}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Coverage</span>
+            <span className="rawFactValue">
+              {receipt.coverage.completed}/{receipt.coverage.total} completed
+              {receipt.coverage.unavailable > 0
+                ? ` · ${receipt.coverage.unavailable} unavailable`
+                : ""}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Scanned block</span>
+            <span className="rawFactValue">
+              #{Number(receipt.blockNumber).toLocaleString()}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Cluster-analysis status</span>
+            <span className="rawFactValue">
+              {cluster?.analysisStatus ?? "unavailable"}
+            </span>
+          </div>
+
+          <div className="rawFact">
+            <span className="rawFactLabel">Recent deltas</span>
+            <span className="rawFactValue">
+              {cluster?.recentDeltas?.length
+                ? cluster.recentDeltas.join(", ")
+                : "none measured"}
+            </span>
+          </div>
+
+          <div className="rawSectionTitle">Evidence IDs &amp; statuses</div>
+          <ul className="rawEvidenceList">
+            {receipt.evidence.map((item) => (
+              <li key={item.id} className="rawEvidenceRow">
+                <span className={`rawStatus rawStatus-${item.status}`}>
+                  {item.status}
+                </span>
+                <span className="rawEvidenceId">{item.id}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="rawSectionTitle">Approvals summary</div>
+          <div className="rawFact">
+            <span className="rawFactLabel">Total approvals</span>
+            <span className="rawFactValue">{approvalsCount}</span>
+          </div>
+          <div className="rawFact">
+            <span className="rawFactLabel">Unlimited approvals</span>
+            <span className="rawFactValue">{unlimitedCount}</span>
+          </div>
+          <div className="rawFact">
+            <span className="rawFactLabel">High-risk approvals</span>
+            <span className="rawFactValue">
+              {receipt.approvalsSummary?.highRiskCount ?? 0}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

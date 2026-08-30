@@ -68,6 +68,8 @@ html[data-theme="dark"],
 html {
   scroll-behavior: smooth;
   color-scheme: light dark;
+  overflow-x: clip;
+  max-width: 100vw;
 }
 
 body {
@@ -80,6 +82,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-size: 15px;
   line-height: 1.55;
+  overflow-x: clip;
+  max-width: 100vw;
 }
 
 h1, h2, h3, h4, .brand, .vword, .herofind .title, .claim {
@@ -145,13 +149,13 @@ code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow
   background: var(--heroGlow);
   padding: 0 18px 60px;
   /*
-   * The floating "Ask Shield" dock (bottom-right) and the theme toggle
-   * (bottom-left) are fixed overlays. 96px clears both plus the dock note, and
-   * the safe-area term keeps the last line of a receipt above the iOS home
-   * indicator instead of under the dock.
+   * Fixed controls (Ask Shield bottom-right, Toggle theme bottom-left) must not cover final content.
+   * 160px desktop / 180px mobile clears both plus safe-area. overflow-x clip prevents horizontal scroll.
    */
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));
   min-height: 100vh;
+  overflow-x: clip;
+  max-width: 100vw;
 }
 
 .icon {
@@ -338,6 +342,9 @@ code, .mono, .vmeta, .detail, .stat .n, .sw, .idtag, .rulechip, .cover, .factrow
 .wrap {
   max-width: 960px;
   margin: 0 auto;
+  overflow-x: clip;
+  max-width: 100%;
+  width: min(960px, 100%);
 }
 
 /* ==========================================================================
@@ -1646,10 +1653,13 @@ details[open] > summary .chev {
   flex-wrap: wrap;
 }
 
-/* Education Carousel */
+/* Education Carousel - contained inside rail, no page sideways scroll */
 .educationCarouselSection {
   margin: 28px auto 0;
   width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-x: clip;
 }
 .carouselHeaderRow {
   display: flex;
@@ -1677,8 +1687,11 @@ details[open] > summary .chev {
 
 .carouselTrackWrapper {
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   padding: 6px 0;
+  max-width: 100%;
+  width: 100%;
   /* Edge fade masks so cards read as continuing off-screen. */
   -webkit-mask-image: linear-gradient(
     90deg,
@@ -2314,13 +2327,30 @@ details[open] > summary .chev {
     margin-left: 0;
     width: 100%;
   }
+  /* Finding 14: mobile WHY THIS VERDICT readability — keep evidence, ease scanning */
   .herofind {
-    padding: 16px 14px;
+    padding: 15px 14px;
+    margin-bottom: 26px;
+  }
+  .herofind .kicker {
+    margin-bottom: 10px;
+    letter-spacing: 0.12em;
   }
   .herofind .title {
-    font-size: 15.5px;
+    font-size: 14.5px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .herofind .detail {
+    font-size: 12px;
+    line-height: 1.45;
+    margin-top: 10px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .herofind .idtag {
+    margin-top: 14px;
     font-size: 11.5px;
   }
   .evidenceRow {
@@ -2704,4 +2734,1026 @@ details[open] > summary .chev {
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
+}
+
+/* ==========================================================================
+   Post-ship audit fixes: Findings 1-11
+   ========================================================================== */
+
+/* Finding 4: Generic wrapper demotion, primary evidence leads */
+.rulechip-demoted {
+  opacity: 0.55;
+  font-size: 10px;
+  padding: 3px 7px;
+  border-style: dashed;
+}
+.primaryEvidenceGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.primaryEvidence {
+  background: var(--blueglow);
+  border-color: var(--blue);
+  color: var(--blue-hi);
+  font-weight: 800;
+  font-size: 11px;
+  padding: 5px 10px;
+}
+.primaryEvidence:hover {
+  background: var(--blue);
+  color: #fff;
+}
+
+/* Finding 1: Mobile fixed controls must not cover final content - already 160px, but enforce safe-area */
+@media (max-width: 640px) {
+  .canvas {
+    padding: 0 12px calc(180px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Ensure footer and final evidence scroll above fixed controls */
+.footerSection {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.evi {
+  padding-bottom: 24px;
+}
+
+/* ==========================================================================
+   Finding 10: Protected Send mobile panel - clear sections, spacing, full-width, safe-area
+   ========================================================================== */
+
+.sendForm {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.formLabelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.formLabelRow label {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+
+.balanceRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.balanceUsdTag {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.amountInputGroup {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  background: var(--card-solid);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.amountInputGroup input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  width: 100%;
+}
+
+.amountInputGroup.inputErrorGroup {
+  border-color: var(--red);
+  background: var(--redbg);
+}
+
+.percentageButtonsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.pctButtonGroup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pctBtn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 750;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  min-height: 32px;
+  transition: all 0.15s;
+}
+
+.pctBtn:hover {
+  border-color: var(--blue);
+  color: var(--blue-hi);
+  background: var(--blueglow);
+}
+
+.pctBtnActive {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+
+.priceEquivalentTag {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  background: var(--bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+
+.errorBox {
+  background: var(--redbg);
+  border: 1px solid rgba(251, 75, 99, 0.3);
+  color: var(--red);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.formGroup input[type="text"] {
+  width: 100%;
+  background: var(--card-solid);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  outline: none;
+}
+
+.formGroup input[type="text"]:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blueglow);
+}
+
+.inputBlocked {
+  border-color: var(--red) !important;
+  background: var(--redbg) !important;
+}
+
+.inputSafe {
+  border-color: var(--green) !important;
+}
+
+.inputActionHelper {
+  display: flex;
+  gap: 6px;
+}
+
+.ghostTextBtn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.quickTestRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 12px;
+  background: var(--bg2);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+.preFlightBox {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preFlightPass {
+  background: var(--greenbg);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.preFlightCaution {
+  background: var(--amberbg);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.preFlightDanger {
+  background: var(--redbg);
+  border-color: rgba(251, 75, 99, 0.4);
+}
+
+.preFlightTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preFlightBadge {
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+}
+
+.preFlightCoverageTag {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.preFlightSummary {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.evidenceChecklist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checklistHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.checkItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sweeperWarning {
+  font-size: 12px;
+  color: var(--red);
+  background: var(--card-solid);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 75, 99, 0.3);
+  margin: 0;
+}
+
+.overrideBox {
+  padding: 12px;
+  background: var(--amberbg);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 10px;
+}
+
+.overrideBox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.txSuccessBox {
+  padding: 14px;
+  background: var(--greenbg);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.txSuccessBox strong {
+  font-size: 13px;
+  color: var(--green);
+}
+
+.txSuccessBox a {
+  font-size: 12px;
+  color: var(--blue-hi);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+.primaryBtn {
+  background: linear-gradient(140deg, var(--blue), var(--blue-deep));
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 13.5px;
+  font-weight: 750;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  box-shadow: 0 4px 16px var(--blueglow);
+  transition: all 0.15s;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.modalPrimaryBtn {
+  flex: 1;
+  justify-content: center;
+  min-width: 180px;
+}
+
+/* Ensure modal body scrollable if exceeds viewport */
+.modalCard {
+  max-height: min(92vh, 840px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 640px) {
+  .modalCard {
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    border-radius: 16px;
+    max-height: 92vh;
+    padding: 20px 16px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  .modalBackdrop {
+    padding: 12px;
+    align-items: flex-end;
+  }
+  .formGroup {
+    padding: 12px;
+  }
+  .amountInputGroup {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .amountInputGroup input[type="number"] {
+    width: 100%;
+    text-align: left;
+  }
+  .modalActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .modalActions .ghostbtn,
+  .modalActions .primaryBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   Finding 11: Mobile token/asset list - visual rows, clear boundaries
+   ========================================================================== */
+
+.tokenSelectorContainer {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tokenTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.tokenTriggerBtn:hover {
+  border-color: var(--blue);
+  color: var(--blue-hi);
+}
+
+.tokenDotBadge {
+  flex-shrink: 0;
+}
+
+.tokenSymbol {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.tokenChevron {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.tokenDropdownMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, 90vw);
+  max-width: 360px;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: min(420px, 70vh);
+}
+
+.dropdownSearchRow {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+}
+
+.dropdownSearchRow input {
+  width: 100%;
+  background: var(--card-solid);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  outline: none;
+}
+
+.dropdownSearchRow input:focus {
+  border-color: var(--blue);
+}
+
+.tokenItemsList {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 6px;
+  max-height: 340px;
+}
+
+.tokenOptionItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+  min-height: 56px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tokenOptionItem:last-child {
+  border-bottom: none;
+}
+
+.tokenOptionItem:hover {
+  background: var(--bg2);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.tokenOptionItem.selected {
+  background: var(--blueglow);
+  border-color: var(--blue);
+}
+
+.tokenDetails {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.symbolRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.symbolRow strong {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.symbolRow .name {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.contractAddr {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  background: var(--bg2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.customTokenAction {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--blue);
+  background: var(--blueglow);
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.customTokenAction strong {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.customTokenAction small {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.selectTag {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--blue-hi);
+  background: var(--card-solid);
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.emptyTokens {
+  padding: 16px;
+  text-align: center;
+}
+
+.emptyTokens p {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .tokenDropdownMenu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    max-height: 70vh;
+  }
+  .tokenOptionItem {
+    padding: 14px 12px;
+    min-height: 60px;
+  }
+  .symbolRow {
+    gap: 6px;
+  }
+  .symbolRow strong {
+    font-size: 14px;
+  }
+  .symbolRow .name {
+    font-size: 12.5px;
+  }
+}
+
+/* ==========================================================================
+   Finding 9: WalletHealthCard honesty - incomplete state styles
+   ========================================================================== */
+
+.scoreValue.scoreIncomplete {
+  color: var(--amber) !important;
+}
+
+.scoreValue.scoreUnrated {
+  color: var(--faint) !important;
+}
+
+/* Finding 13: Observed Evidence Score — tone colors + calculation disclosure */
+.scoreValue.scoreWarn {
+  color: var(--amber) !important;
+}
+
+.scoreValue.scoreDanger {
+  color: var(--red) !important;
+}
+
+.scoreArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 380px;
+}
+
+.scoreDisclosure {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.scoreDisclosure summary {
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--blue-hi);
+  user-select: none;
+  list-style: none;
+}
+
+.scoreDisclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.scoreDisclosure summary:hover {
+  color: var(--blue);
+}
+
+/* Clean readable breakdown card: labels left, values right, subtle dividers. */
+.scoreBreakdown {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.scoreBreakdownHeader {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 2px 0 8px;
+}
+
+.scoreRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.scoreRowLabel {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--ink);
+  text-align: left;
+  flex: 0 0 auto;
+}
+
+.scoreRowValue {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.scoreRowFinal {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.scoreRowFinal .scoreRowLabel {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.scoreRowFinal .scoreRowValue {
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.scoreDisclosureNote {
+  margin: 8px 0 0;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+/* Mobile: keep rows readable, values right-aligned, no clipping or sideways overflow. */
+@media (max-width: 640px) {
+  .scoreBreakdown {
+    padding: 10px;
+  }
+  .scoreRow {
+    gap: 12px;
+  }
+  .scoreRowLabel {
+    min-width: 0;
+  }
+  .scoreRowValue {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+.vDanger {
+  color: var(--red);
+}
+.vWarn {
+  color: var(--amber);
+}
+.vSafe {
+  color: var(--green);
+}
+.vMuted {
+  color: var(--faint);
+}
+.vIncomplete {
+  color: var(--amber);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Raw scan evidence panel (Inspect/Hide Raw Evidence toggle)
+   Public technical facts only. Scrollable + mobile-safe, no sideways overflow.
+   ========================================================================== */
+
+.rawEvidencePanel {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg2);
+  padding: 14px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rawEvidenceHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rawEvidenceTitle {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.rawEvidenceSub {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.45;
+}
+
+.rawFact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rawFactLabel {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  text-align: left;
+}
+
+.rawFactValue {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.rawSectionTitle {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-top: 6px;
+}
+
+.rawEvidenceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rawEvidenceRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rawEvidenceRow:last-child {
+  border-bottom: none;
+}
+
+.rawStatus {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.rawStatus-pass {
+  color: var(--green);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.rawStatus-warning {
+  color: var(--amber);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.rawStatus-danger {
+  color: var(--red);
+  border-color: rgba(251, 75, 99, 0.4);
+}
+.rawStatus-info {
+  color: var(--blue-hi);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+.rawStatus-unavailable {
+  color: var(--faint);
+  border-color: var(--line);
+}
+
+.rawEvidenceId {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+/* Mobile: keep facts stacked and wrap values with no clipping */
+@media (max-width: 640px) {
+  .rawEvidencePanel {
+    max-height: 300px;
+    padding: 12px;
+  }
+  .rawFact {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 0;
+  }
+  .rawFactValue {
+    text-align: left;
+    white-space: normal;
+  }
+  .rawEvidenceRow {
+    flex-wrap: wrap;
+  }
 }
