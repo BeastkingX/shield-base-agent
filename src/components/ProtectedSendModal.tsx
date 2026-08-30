@@ -489,6 +489,18 @@ export default function ProtectedSendModal({
                 />
                 <span>I understand the security risk and wish to override Shield</span>
               </label>
+
+              <p className="smallTestHint">
+                Prefer to verify first? Send a{" "}
+                <button
+                  type="button"
+                  className="ghostTextBtn"
+                  onClick={() => setAmount(isBlocked ? "0.0001" : amount)}
+                >
+                  small test amount (0.0001)
+                </button>{" "}
+                to confirm the wallet behaves before sending more.
+              </p>
             </div>
           )}
 

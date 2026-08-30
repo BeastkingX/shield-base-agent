@@ -46,7 +46,14 @@ const SWEEP_THRESHOLD_SECONDS = 30;
 const RAPID_FORWARD_SECONDS = 120;
 const MIN_VELOCITY_SAMPLES = 2;
 const TARGET_WINDOW = 30;
-const HOP_WINDOW = 10;
+/**
+ * How many of the funder's / hub's own transactions to read. This needs to be
+ * generous: hop-2 (the funder-of-funder) is found by scanning the seed funder's
+ * earliest inbound funding, and a busy dispenser can have dozens of txs before
+ * its own origin. 10 rows was frequently too few, leaving hop2Funder null and
+ * funderType "Unread". Widened so the origin is (usually) still in the window.
+ */
+const HOP_WINDOW = 40;
 /**
  * Shared retry budget for one history window. analyzeClusterTaint reads up to
  * four windows (earliest+recent parallel, funder+hub parallel), so total worst
@@ -61,7 +68,7 @@ const HISTORY_BUDGET_MS = 4_000;
  * always cut short (leaving hop2Funder null and funderType "Unread"). A fresh
  * budget lets the 2-hop traversal actually complete.
  */
-const HOP_BUDGET_MS = 4_000;
+const HOP_BUDGET_MS = 6_000;
 
 interface IndexedTx {
   hash: string;
