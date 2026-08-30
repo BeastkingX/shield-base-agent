@@ -1013,21 +1013,14 @@ export default function Home() {
                 GitHub ↗
               </a>
               <a
-                href="https://x.com/ShieldBaseAgent"
+                href="https://x.com/BaseShieldApp"
                 target="_blank"
                 rel="noreferrer"
                 className="socialLink"
               >
                 X (Twitter) ↗
               </a>
-              <a
-                href="https://t.me/shieldbaseagent"
-                target="_blank"
-                rel="noreferrer"
-                className="socialLink"
-              >
-                Telegram ↗
-              </a>
+              <span className="socialLink comingSoon">Telegram — coming soon</span>
               <Link href="/verify" className="socialLink">
                 Verifier Portal ↗
               </Link>
