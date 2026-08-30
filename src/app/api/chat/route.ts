@@ -34,7 +34,133 @@ function getHonestShieldDescription(receipt?: ScanReceipt): string {
     ? `\n\nCurrent receipt context:\n• Address: ${receipt.address}\n• Verdict: ${receipt.verdict} (${receipt.coverage.completed}/${receipt.coverage.total} checks)\n• Evidence IDs in this receipt: ${receipt.evidence.map((e) => e.id).join(", ")}\n• Fired rules: ${receipt.firedRules.map((r) => r.id).join(", ")}`
     : "\n\nNo receipt currently loaded. Scan an address first to get evidence-grounded answers.";
 
-  return `Shield is an evidence-first security scanner on Base Mainnet. It does not simulate or execute transactions.\n\nWhat Shield checks on observed Base evidence:\n${checksList}\n\nWhat Shield does not do:\n• Does not simulate or execute a transaction\n• Does not promise that an address is safe\n• Does not invent a receipt explanation if no receipt exists\n\nVerdicts are LOW OBSERVED RISK, CAUTION, HIGH OBSERVED RISK, or INSUFFICIENT DATA, derived from deterministic rules over measured facts. Always review the evidence trail and receipt hash before acting.${receiptNote}`;
+  return `Shield is an evidence-first security scanner on Base Mainnet. Shield does not simulate or execute transactions. It checks observed on-chain evidence.\n\nWhat Shield checks on observed Base evidence:\n${checksList}\n\nWhat Shield does not do:\n• Does not simulate or execute a transaction\n• Does not promise that an address is safe\n• Does not invent a receipt explanation if no receipt exists\n\nVerdicts are LOW OBSERVED RISK, CAUTION, HIGH OBSERVED RISK, or INSUFFICIENT DATA, derived from deterministic rules over measured facts. Always review the evidence trail and receipt hash before acting.${receiptNote}`;
+}
+
+/**
+ * Clause boundary: end of sentence, bullet, newline, semicolon, or a comma
+ * that opens a new independent clause (", and it ...").
+ *
+ * The guard only ever rewrites a claim when it can see the whole clause that
+ * owns it, so "does not simulate or execute transactions" is never confused
+ * with the affirmative claim "simulates transactions".
+ */
+const CLAUSE_BOUNDARY = /\s*(?:[.!?;•\n]|,\s+(?:and|but|yet|so|however|though|although)\b)\s*/g;
+
+/** Negation cues that make a claim honest already ("does not simulate ..."). */
+const NEGATION_CUE =
+  /\b(?:not|never|no|nor|without|cannot|can['’]t|don['’]t|doesn['’]t|didn['’]t|isn['’]t|aren['’]t|wasn['’]t|won['’]t|wouldn['’]t|shouldn['’]t)\b/i;
+
+/**
+ * A claim about a third party ("the attacker executed a transaction") is
+ * factual and must survive untouched. Only claims about Shield, the agent or
+ * the user's own action get rewritten.
+ */
+const THIRD_PARTY_SUBJECT =
+  /\b(?:the\s+)?(?:attacker|hacker|scammer|thief|exploiter|drainer|deployer|bot|victim|user|trader|they|he|she|contract|protocol|vault|pool|exchange|wallet)s?\s*$/i;
+
+/** The clause that immediately precedes `index`, never crossing a boundary. */
+function clauseBefore(text: string, index: number): string {
+  const window = text.slice(Math.max(0, index - 80), index);
+  const parts = window.split(CLAUSE_BOUNDARY);
+  const clause = parts[parts.length - 1] ?? "";
+  // "No, Shield simulates ..." answers the user, it does not negate the claim.
+  return clause.replace(/^\s*(?:no|yes|well|ok|okay)\s*,\s*/i, "");
+}
+
+function isNegated(text: string, index: number): boolean {
+  return NEGATION_CUE.test(clauseBefore(text, index));
+}
+
+function isThirdPartyClaim(text: string, index: number): boolean {
+  return THIRD_PARTY_SUBJECT.test(clauseBefore(text, index));
+}
+
+type ClaimForm = "bare" | "third" | "past" | "gerund";
+
+const CLAIM_VERB: Record<string, ClaimForm> = {
+  simulate: "bare",
+  simulates: "third",
+  simulated: "past",
+  simulating: "gerund",
+  execute: "bare",
+  executes: "third",
+  executed: "past",
+  executing: "gerund",
+};
+
+const CHECK_VERB: Record<ClaimForm, string> = {
+  bare: "check",
+  third: "checks",
+  past: "checked",
+  gerund: "checking",
+};
+
+/**
+ * A full unsupported claim: simulate/execute + optional determiner +
+ * transaction-ish object. The object is consumed with the verb so the rewrite
+ * can never leave a dangling plural ("...evidence" + "s").
+ */
+const SIMULATION_CLAIM =
+  /\b(simulat(?:e|es|ed|ing)|execut(?:e|es|ed|ing))\s+(?:(a|an|the|this|that|these|those|its|your|their)\s+)?(transactions?|txs?|swaps?|trades?)\b/gi;
+
+/** Bare "Shield simulates ..." with no transaction object. */
+const BARE_SIMULATE_CLAIM =
+  /\b(simulat(?:e|es|ed|ing))\b(?!\s+(?:observed|on-chain|evidence|checks?|the\s+receipt))/gi;
+
+/** Noun form: "a transaction simulation", with its determiner kept in sync. */
+const SIMULATION_NOUN_CLAIM =
+  /\b(?:(a|an|the|this|that|any|no)\s+)?(?:transaction|tx)\s+simulation\b/gi;
+
+function honestClaimPhrase(form: ClaimForm, determiner?: string): string {
+  const word = (determiner || "").toLowerCase();
+  const article =
+    !word || word === "these" || word === "those"
+      ? ""
+      : word === "a" || word === "an"
+        ? "the "
+        : `${word} `;
+  return `${CHECK_VERB[form]} ${article}observed on-chain evidence`;
+}
+
+/**
+ * Noun form rewrite. The article has to agree with "observed", otherwise the
+ * guard would emit "a observed evidence check".
+ */
+function honestNounPhrase(determiner: string | undefined, original: string): string {
+  const det = (determiner || "").toLowerCase();
+  const article = det === "a" || det === "an" ? "an" : det;
+  const phrase = article ? `${article} observed evidence check` : "observed evidence check";
+  return /^[A-Z]/.test(original) ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : phrase;
+}
+
+/**
+ * Rewrite unsupported positive simulation claims, leave honest negatives and
+ * third-party facts exactly as written.
+ */
+function rewriteSimulationClaims(text: string): string {
+  let out = text.replace(SIMULATION_CLAIM, (match, ...rest: unknown[]): string => {
+    const verb = String(rest[0]);
+    const determiner = rest[1] === undefined ? undefined : String(rest[1]);
+    const offset = Number(rest[3]);
+    if (isNegated(text, offset) || isThirdPartyClaim(text, offset)) return match;
+    return honestClaimPhrase(CLAIM_VERB[verb.toLowerCase()] ?? "bare", determiner);
+  });
+
+  out = out.replace(SIMULATION_NOUN_CLAIM, (match, ...rest: unknown[]): string => {
+    const offset = Number(rest[rest.length - 2]);
+    if (isNegated(out, offset) || isThirdPartyClaim(out, offset)) return match;
+    return honestNounPhrase(rest[0] === undefined ? undefined : String(rest[0]), match);
+  });
+
+  out = out.replace(BARE_SIMULATE_CLAIM, (match, ...rest: unknown[]): string => {
+    const verb = String(rest[0]);
+    const offset = Number(rest[rest.length - 2]);
+    if (isNegated(out, offset) || isThirdPartyClaim(out, offset)) return match;
+    return CHECK_VERB[CLAIM_VERB[verb.toLowerCase()] ?? "bare"];
+  });
+
+  return out;
 }
 
 /**
@@ -42,20 +168,7 @@ function getHonestShieldDescription(receipt?: ScanReceipt): string {
  * Applied to both LLM and fallback outputs.
  */
 function enforceHonestyGuard(text: string, receipt?: ScanReceipt): string {
-  let out = text;
-
-  // Ban simulation / execution claims -> replace with honest phrasing
-  const simulationPatterns: Array<[RegExp, string]> = [
-    [/simulates?\s+(a\s+)?transaction/gi, "checks observed on-chain evidence"],
-    [/simulating\s+(a\s+)?transaction/gi, "checking observed on-chain evidence"],
-    [/executes?\s+(a\s+)?transaction/gi, "checks observed on-chain evidence"],
-    [/executing\s+(a\s+)?transaction/gi, "checking observed on-chain evidence"],
-    [/will\s+simulate/gi, "will check observed evidence"],
-    [/transaction\s+simulation/gi, "observed evidence check"],
-  ];
-  for (const [re, replacement] of simulationPatterns) {
-    out = out.replace(re, replacement);
-  }
+  let out = rewriteSimulationClaims(text);
 
   // Ban safety promises as verdict, keep Secure label okay but ban direct promises
   // Avoid literal banned phrases in source so verdict-language test passes; construct via concatenation
@@ -68,7 +181,12 @@ function enforceHonestyGuard(text: string, receipt?: ScanReceipt): string {
     [/you\s+are\s+safe/gi, "no red flags were found in completed checks, but this is not a guarantee"],
   ];
   for (const [re, replacement] of safetyPatterns) {
-    out = out.replace(re, replacement);
+    // Same clause rule as the simulation guard: "does not promise that an
+    // address is safe" is an honest negative and must not be rewritten.
+    out = out.replace(re, (match, ...rest: unknown[]): string => {
+      const offset = Number(rest[rest.length - 2]);
+      return isNegated(out, offset) ? match : replacement;
+    });
   }
 
   // For HIGH verdict, never allow "No red flags"
@@ -158,15 +276,21 @@ export async function POST(request: NextRequest) {
 
     const lower = message.toLowerCase().trim();
 
-    // Deterministic override for "What is Shield" - must not claim simulation or safety
+    // Deterministic override for "What is Shield" and for "Does Shield simulate
+    // transactions?" - must not claim simulation or safety.
+    const asksAboutSimulation =
+      /\b(shield|agent|copilot|scanner)\b[^.?!]{0,40}\b(simulat\w*|execut\w*)\b/i.test(lower) ||
+      /\b(simulat\w*|execut\w*)\b[^.?!]{0,40}\b(shield|agent|copilot|scanner)\b/i.test(lower);
+
     if (
       lower.includes("what is shield") ||
       lower === "what is shield?" ||
       lower.includes("what does shield do") ||
-      lower.includes("how does shield work")
+      lower.includes("how does shield work") ||
+      asksAboutSimulation
     ) {
-      const honest = getHonestShieldDescription(receipt);
-      return NextResponse.json({ reply: sanitizeReply(enforceHonestyGuard(honest, receipt)) });
+      const honest = sanitizeReply(getHonestShieldDescription(receipt));
+      return NextResponse.json({ reply: enforceHonestyGuard(honest, receipt) });
     }
 
     const matchedFactCard = findMatchingFactCard(message);
