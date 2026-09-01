@@ -57,18 +57,22 @@ const HOP_WINDOW = 40;
 /**
  * Shared retry budget for one history window. analyzeClusterTaint reads up to
  * four windows (earliest+recent parallel, funder+hub parallel), so total worst
- * is 2*budget. Reduced from 6s to 4s to stay inside Vercel's 26s hard budget
- * when wallet path also runs history+approvals+threat in parallel.
+ * is 2*budget. Raised from 4s to 8s on 2026-09-01: the Blockscout compat route
+ * now regularly answers in ~4-5s (it was <2.5s when 4s was chosen), so a 2.5s
+ * per-attempt timeout aborted even successful responses and left the money
+ * trail permanently "unavailable". Worst-case total stays inside the scan's
+ * 26s hard budget (~21s for the two sequential windows).
  * Honest partial-mode: if earliest window times out, recent window still counts.
  */
-const HISTORY_BUDGET_MS = 4_000;
+const HISTORY_BUDGET_MS = 8_000;
 /**
  * A dedicated budget for the hop-2 (funder) and hub reads. Sharing the same
  * deadline as the earliest/recent windows meant the funder's history was almost
  * always cut short (leaving hop2Funder null and funderType "Unread"). A fresh
- * budget lets the 2-hop traversal actually complete.
+ * budget lets the 2-hop traversal actually complete. Raised 6s -> 9s to match
+ * today's slower provider latency (see HISTORY_BUDGET_MS note).
  */
-const HOP_BUDGET_MS = 6_000;
+const HOP_BUDGET_MS = 9_000;
 
 interface IndexedTx {
   hash: string;
@@ -108,7 +112,7 @@ async function requestCompatTxList(
     url,
     { cache: "no-store" },
     {
-      timeoutMs: 2500,
+      timeoutMs: 5000,
       attempts: options.attempts,
       deadlineAt: options.deadlineAt,
       label: `Blockscout txlist (${options.withKey ? "keyed" : "keyless"})`,
@@ -188,7 +192,7 @@ async function requestTxList(
       restUrl,
       { cache: "no-store" },
       {
-        timeoutMs: 2500,
+        timeoutMs: 5000,
         attempts: RETRY_ATTEMPTS,
         deadlineAt,
         label: "Blockscout REST v2",
