@@ -1020,7 +1020,14 @@ export default function Home() {
               >
                 X (Twitter) ↗
               </a>
-              <span className="socialLink comingSoon">Telegram — coming soon</span>
+              <a
+                href="https://t.me/BaseShieldApp"
+                target="_blank"
+                rel="noreferrer"
+                className="socialLink"
+              >
+                Telegram ↗
+              </a>
               <Link href="/verify" className="socialLink">
                 Verifier Portal ↗
               </Link>
