@@ -110,6 +110,7 @@ export default function Home() {
     SCAN_STAGES.map(() => "pending"),
   );
   const [scanSummary, setScanSummary] = useState<string | null>(null);
+  const [scanWaitHint, setScanWaitHint] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<ScanReceipt | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -229,11 +230,29 @@ export default function Home() {
     setStage(2, "active");
     setSrAnnouncement("Stage 3 of 4: collecting indexed evidence from Base.");
 
+    // Honest progress feedback: stage 3 reads indexed history from the explorer,
+    // which can legitimately take 25s-2min when the provider is slow or queued.
+    // A live elapsed counter keeps the UI from looking frozen, and a client-side
+    // abort at 150s replaces an indefinite hang with a clear message instead of
+    // an eternal spinner.
+    const evidenceStartedAt = performance.now();
+    const waitHintTimer = window.setInterval(() => {
+      const elapsed = Math.round((performance.now() - evidenceStartedAt) / 1000);
+      setScanWaitHint(
+        elapsed < 15
+          ? `Collecting indexed evidence… ${elapsed}s`
+          : `Collecting indexed evidence… ${elapsed}s — the history provider is responding slowly. Scans normally finish within 2 minutes; Shield will not invent a verdict.`,
+      );
+    }, 1000);
+    const evidenceController = new AbortController();
+    const evidenceAbortTimer = window.setTimeout(() => evidenceController.abort(), 150_000);
+
     try {
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: trimmed }),
+        signal: evidenceController.signal,
       });
 
       // Safely handle non-JSON platform errors (e.g. Vercel "An error occurred..." HTML).
@@ -285,13 +304,24 @@ export default function Home() {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 120);
     } catch (caught) {
-      const msg = caught instanceof Error ? caught.message : "The scan failed.";
+      const aborted =
+        typeof DOMException !== "undefined" &&
+        caught instanceof DOMException &&
+        caught.name === "AbortError";
+      const msg = aborted
+        ? "The evidence provider did not respond within 150 seconds, so the scan was stopped. No verdict was produced — please try again in a minute."
+        : caught instanceof Error
+          ? caught.message
+          : "The scan failed.";
       setStageStates((previous) =>
         previous.map((value) => (value === "active" ? "unavailable" : value)),
       );
       setError(msg);
       setSrAnnouncement(`Scan error: ${msg}`);
     } finally {
+      window.clearInterval(waitHintTimer);
+      window.clearTimeout(evidenceAbortTimer);
+      setScanWaitHint(null);
       setLoading(false);
     }
   }, []);
@@ -575,6 +605,19 @@ export default function Home() {
                   states={stageStates}
                   summary={scanSummary}
                 />
+                {scanWaitHint && (
+                  <p
+                    style={{
+                      margin: "10px 0 0",
+                      fontSize: "13px",
+                      lineHeight: 1.45,
+                      opacity: 0.85,
+                    }}
+                    aria-live="polite"
+                  >
+                    {scanWaitHint}
+                  </p>
+                )}
               </div>
             )}
 
