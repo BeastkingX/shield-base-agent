@@ -171,13 +171,14 @@ async function requestTxList(
     errors.push(err instanceof Error ? err.message : "keyed txlist failed");
   }
 
-  // 2. Keyless compatibility endpoint, tried exactly once, only when a key was
-  //    in play. A rate-limited paid key must not cost the scan its history.
+  // 2. Keyless compatibility endpoint, tried up to twice (deadline-gated), only
+  //    when a key was in play. A rate-limited paid key must not cost the scan
+  //    its history; the second attempt only starts if the window budget allows.
   if (apiKey) {
     try {
       return await requestCompatTxList(PUBLIC_COMPAT_URL, address, sort, offset, {
         withKey: false,
-        attempts: 1,
+        attempts: 2,
         deadlineAt,
       });
     } catch (err: unknown) {
