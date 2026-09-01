@@ -71,7 +71,10 @@ function computeOutflowStat(cluster: {
 }
 
 /**
- * Mirrors evidence claim generation for warning case in scan-agent.ts after precision fix
+ * Mirrors evidence claim generation for warning case in scan-agent.ts after
+ * the precision fix AND the 2-hop honesty fix: the claim must state a measured
+ * dispenser/hub pattern instead of denying it, and only deny when none was
+ * measured.
  */
 function buildMoneyTrailWarningClaim(cluster: {
   sweepVelocitySeconds: number | null;
@@ -82,8 +85,16 @@ function buildMoneyTrailWarningClaim(cluster: {
   seedFunder: string;
   funderProfile: string;
   hubProfile: string;
+  hop2Funder?: string | null;
   sweepDestination: string;
 }): { label: string; claim: string; facts: Record<string, string | number> } {
+  const dispenserMeasured = cluster.funderProfile.startsWith("Gas-dispenser pattern");
+  const hubMeasured = cluster.hubProfile.startsWith("Consolidation-hub pattern");
+  const patternSentence = dispenserMeasured
+    ? `A gas-dispenser seed funder was measured: ${cluster.funderProfile} The seed funder was itself first funded by ${cluster.hop2Funder ?? "not observed in the read window"} (hop-2).`
+    : hubMeasured
+      ? `A consolidation-hub outflow destination was measured: ${cluster.hubProfile}`
+      : "No dispenser-funder or aggregation-hub pattern was measured.";
   const isRecentOnly = cluster.recentRapidForwarding && !cluster.isSweeperActive;
   if (isRecentOnly) {
     const recent = cluster.recentDeltas || [];
@@ -92,22 +103,37 @@ function buildMoneyTrailWarningClaim(cluster: {
     const medianStr = median !== null ? `${median}s` : "unknown";
     return {
       label: "Recent rapid forwarding measured (unattributed)",
-      claim: `Recent deposits were forwarded in ${recentStr} (recent rapid forwarding), while the lifetime median across ${cluster.velocitySamples} sample(s) is ${medianStr}. This indicates a recent behavioral change versus the longer history. No dispenser-funder or aggregation-hub pattern was measured. Legitimate services (e.g. exchange deposit wallets) can show the same shape.`,
+      claim: `Recent deposits were forwarded in ${recentStr} (recent rapid forwarding), while the lifetime median across ${cluster.velocitySamples} sample(s) is ${medianStr}. This indicates a recent behavioral change versus the longer history. ${patternSentence} Legitimate services (e.g. exchange deposit wallets) can show the same shape.`,
       facts: {
         "Recent deltas (s)": recent.join(", "),
         "Lifetime median (s)": medianStr,
         "Velocity samples": cluster.velocitySamples,
+        "Seed funder": cluster.seedFunder,
+        "Funder profile": cluster.funderProfile,
+        "Hop-2 funder": cluster.hop2Funder ?? "not observed",
+        "Hub profile": cluster.hubProfile,
       },
     };
   } else {
     return {
       label: cluster.isSweeperActive
-        ? "Automated forwarding measured (unattributed)"
+        ? dispenserMeasured
+          ? "Automated forwarding measured, seed funder is a gas dispenser"
+          : "Automated forwarding measured (unattributed)"
         : "Recent rapid forwarding measured (unattributed)",
       claim: cluster.isSweeperActive
-        ? `Deposits are forwarded quickly (median ${cluster.sweepVelocitySeconds}s over ${cluster.velocitySamples} sample(s)), but no dispenser-funder or aggregation-hub pattern was measured.`
-        : `Recent rapid forwarding was measured (recent deltas ${cluster.recentDeltas.join("s and ")}s, lifetime median ${cluster.sweepVelocitySeconds}s over ${cluster.velocitySamples} sample(s)). No dispenser-funder or aggregation-hub pattern was measured.`,
-      facts: {},
+        ? `Deposits are forwarded quickly (median ${cluster.sweepVelocitySeconds}s over ${cluster.velocitySamples} sample(s)). ${patternSentence} Fast forwarding alone does not prove malicious intent, but a dispenser-funded wallet forwarding deposits within seconds matches measured burner-wallet infrastructure. Legitimate services (e.g. exchange deposit wallets) can show the same forwarding speed.`
+        : `Recent rapid forwarding was measured (recent deltas ${cluster.recentDeltas.join("s and ")}s, lifetime median ${cluster.sweepVelocitySeconds}s over ${cluster.velocitySamples} sample(s)). ${patternSentence} Legitimate services can show the same shape.`,
+      facts: {
+        "Median forward time (s)": cluster.sweepVelocitySeconds as number,
+        "Recent deltas (s)": cluster.recentDeltas.join(", "),
+        "Samples": cluster.velocitySamples,
+        "Top outflow destination": cluster.sweepDestination,
+        "Seed funder": cluster.seedFunder,
+        "Funder profile": cluster.funderProfile,
+        "Hop-2 funder": cluster.hop2Funder ?? "not observed",
+        "Hub profile": cluster.hubProfile,
+      },
     };
   }
 }
@@ -227,5 +253,61 @@ describe("outflow stat precision fix", () => {
 
     const { claim } = buildMoneyTrailWarningClaim(cluster);
     expect(claim).toContain("No dispenser-funder or aggregation-hub pattern was measured");
+  });
+
+  it("measured gas-dispenser funder: claim states the pattern + hop-2 instead of denying it", () => {
+    const cluster = {
+      sweepVelocitySeconds: 22,
+      velocitySamples: 3,
+      recentDeltas: [30, 22, 6],
+      recentRapidForwarding: true,
+      isSweeperActive: true,
+      seedFunder: "0x3d66f034867a2cebd9be7cca4b0cb4b22ce27d6c",
+      funderProfile:
+        "Gas-dispenser pattern (measured): 20 distinct addresses funded with <=0.0005 ETH each.",
+      hubProfile: "No aggregator pattern",
+      hop2Funder: "0xa7c6c7c02186a8ecf5229a59eb2a3cfb7f45e6ed",
+      sweepDestination: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    };
+
+    const { label, claim, facts } = buildMoneyTrailWarningClaim(cluster);
+
+    // Label surfaces the measured dispenser (headline evidence for the 2-hop story)
+    expect(label).toContain("gas dispenser");
+
+    // Claim states the measured pattern, the count, and hop-2
+    expect(claim).toContain("A gas-dispenser seed funder was measured");
+    expect(claim).toContain("20 distinct addresses");
+    expect(claim).toContain("(hop-2)");
+    expect(claim).toContain("0xa7c6c7c02186a8ecf5229a59eb2a3cfb7f45e6ed");
+
+    // Must NOT deny the pattern that was measured
+    expect(claim).not.toContain("No dispenser-funder or aggregation-hub pattern was measured");
+
+    // Facts expose the full trail
+    expect(facts["Seed funder"]).toBe("0x3d66f034867a2cebd9be7cca4b0cb4b22ce27d6c");
+    expect(String(facts["Funder profile"])).toContain("Gas-dispenser pattern");
+    expect(facts["Hop-2 funder"]).toBe("0xa7c6c7c02186a8ecf5229a59eb2a3cfb7f45e6ed");
+  });
+
+  it("recent-only warning with measured dispenser: denial sentence is replaced", () => {
+    const cluster = {
+      sweepVelocitySeconds: 116681,
+      velocitySamples: 5,
+      recentDeltas: [598, 20],
+      recentRapidForwarding: true,
+      isSweeperActive: false,
+      seedFunder: "0xabc",
+      funderProfile:
+        "Gas-dispenser pattern (measured): 9 distinct addresses funded with <=0.0005 ETH each.",
+      hubProfile: "No aggregator pattern",
+      hop2Funder: "0x1234",
+      sweepDestination: "0xdef",
+    };
+
+    const { claim } = buildMoneyTrailWarningClaim(cluster);
+    expect(claim).toContain("A gas-dispenser seed funder was measured");
+    expect(claim).toContain("(hop-2)");
+    expect(claim).not.toContain("No dispenser-funder or aggregation-hub pattern was measured");
   });
 });
