@@ -1,5 +1,35 @@
 [
   {
+    "scannedAt": "2026-09-28T15:22:24.047Z",
+    "address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    "label": "vitalik.eth (EIP-7702)",
+    "targetType": "wallet",
+    "verdict": "CAUTION",
+    "receiptId": "shield_7e67831492cad9409ea5",
+    "receiptHash": "0x7e67831492cad9409ea5f36beefac3327cf4a5b1ee8bfb1c6f50babc0c48f9d1",
+    "blockNumber": "51909798"
+  },
+  {
+    "scannedAt": "2026-09-28T15:22:23.723Z",
+    "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "label": "Circle USDC Proxy",
+    "targetType": "contract",
+    "verdict": "INSUFFICIENT DATA",
+    "receiptId": "shield_62a73ab69635a09e61d3",
+    "receiptHash": "0x62a73ab69635a09e61d3b965a5e04f8f76bed211f2f9a30f4b0bed11ed460a66",
+    "blockNumber": "51909798"
+  },
+  {
+    "scannedAt": "2026-09-28T15:22:22.947Z",
+    "address": "0x4200000000000000000000000000000000000006",
+    "label": "Base WETH9 Predeploy",
+    "targetType": "contract",
+    "verdict": "INSUFFICIENT DATA",
+    "receiptId": "shield_78558b52fda6c8d409ab",
+    "receiptHash": "0x78558b52fda6c8d409abc99953fb9b04480b1f3ccd700cf4c11f6b7dc9e9f69f",
+    "blockNumber": "51909798"
+  },
+  {
     "scannedAt": "2026-09-28T06:47:52.504Z",
     "address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
     "label": "vitalik.eth (EIP-7702)",
